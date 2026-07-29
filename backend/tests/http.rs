@@ -45,3 +45,32 @@ async fn neutral_collection_alias_is_routed() {
         .unwrap();
     assert_eq!(response.status(), 400);
 }
+
+#[tokio::test]
+async fn collection_proxy_test_is_routed() {
+    let response = app(state())
+        .oneshot(
+            Request::get("/api/collect/not-a-uuid")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test]
+async fn anti_adblock_configuration_requires_authentication() {
+    let response = app(state())
+        .oneshot(
+            Request::put("/api/sites/00000000-0000-4000-8000-000000000000/anti-adblock")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"serverType":"caddy","jsPath":"/456bbb63bb86.js","beaconPath":"/0d31360a3101"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+}

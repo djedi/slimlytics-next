@@ -21,4 +21,27 @@ describe('ApiClient', () => {
     expect(sites).toHaveLength(3);
     expect(sites[0].overview?.trend).toHaveLength(28);
   });
+
+  it('persists per-site anti-adblock server and path settings', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 's1',
+      name: 'Example',
+      domain: 'example.com',
+      writeKey: 'wk',
+      antiAdblockServer: 'caddy',
+      antiAdblockJsPath: '/456bbb63bb86.js',
+      antiAdblockBeaconPath: '/0d31360a3101'
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const api = new ApiClient('/api', fetcher, false);
+    api.setToken('secret');
+    await api.updateAntiAdblock('s1', {
+      serverType: 'caddy',
+      jsPath: '/456bbb63bb86.js',
+      beaconPath: '/0d31360a3101'
+    });
+    expect(fetcher).toHaveBeenCalledWith('/api/sites/s1/anti-adblock', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ serverType: 'caddy', jsPath: '/456bbb63bb86.js', beaconPath: '/0d31360a3101' })
+    }));
+  });
 });

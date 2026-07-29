@@ -15,7 +15,7 @@ This repository is a ground-up rewrite. It does not replace or rewrite the histo
 - Cookieless tracking by default
 - Sensitive query-parameter redaction and no form capture
 - First-party tracker delivery to reduce accidental blocking
-- Optional anti-adblock installation code with neutral script and collection paths
+- Clicky-style first-party proxy setup with per-site paths, Caddy/Nginx/Apache configuration, and test links
 - Responsive Svelte interface with light, dark, and system themes
 - Docker Compose deployment with PostgreSQL and Caddy
 
@@ -92,18 +92,13 @@ npm --prefix frontend run dev
 
 ## Tracker
 
-The dashboard generates the correct site-specific snippet. A basic installation looks like:
+The dashboard generates random, editable first-party paths plus the matching Caddy, Nginx, or Apache configuration. After installing that server configuration, the measured site needs only a same-origin snippet:
 
 ```html
-<script
-  async
-  src="https://analytics.example.com/tracker.js"
-  data-write-key="YOUR_SITE_WRITE_KEY"
-  data-endpoint="https://analytics.example.com/api/collect">
-</script>
+<script async src="/456bbb63bb86.js"></script>
 ```
 
-For best reliability, proxy the tracker and collection endpoint through the site’s own domain. See `docs/FIRST_PARTY_PROXY.md`.
+The generated JavaScript path returns the complete tracker initialized for that site's exact beacon path. The generated test links verify both routes without inserting a fake analytics event. See `docs/FIRST_PARTY_PROXY.md`.
 
 The tracker never captures form values. Cookieless tracking, Do Not Track, and Global Privacy Control behavior are documented in `docs/PRIVACY.md`.
 

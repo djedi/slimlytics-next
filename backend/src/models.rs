@@ -13,6 +13,9 @@ pub struct Site {
     pub allowed_origins: Vec<String>,
     pub retention_days: i32,
     pub write_key: Uuid,
+    pub anti_adblock_server: String,
+    pub anti_adblock_js_path: String,
+    pub anti_adblock_beacon_path: String,
     pub created_at: DateTime<Utc>,
 }
 #[derive(Debug, Deserialize)]
@@ -28,6 +31,54 @@ pub struct SiteInput {
     #[serde(default = "retention")]
     #[serde(alias = "retention_days")]
     pub retention_days: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AntiAdblockInput {
+    pub server_type: String,
+    pub js_path: String,
+    pub beacon_path: String,
+}
+
+impl AntiAdblockInput {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !matches!(self.server_type.as_str(), "caddy" | "nginx" | "apache") {
+            return Err("unsupported server type");
+        }
+        if !valid_proxy_path(&self.js_path, true) {
+            return Err("invalid JavaScript path");
+        }
+        if !valid_proxy_path(&self.beacon_path, false) {
+            return Err("invalid beacon path");
+        }
+        if self.js_path == self.beacon_path {
+            return Err("proxy paths must be different");
+        }
+        Ok(())
+    }
+}
+
+fn valid_proxy_path(value: &str, javascript: bool) -> bool {
+    let Some(name) = value.strip_prefix('/') else {
+        return false;
+    };
+    if name.contains('/') || name.len() > 67 {
+        return false;
+    }
+    let stem = if javascript {
+        let Some(stem) = name.strip_suffix(".js") else {
+            return false;
+        };
+        stem
+    } else {
+        name
+    };
+    let max_stem_len = if javascript { 63 } else { 64 };
+    (6..=max_stem_len).contains(&stem.len())
+        && stem
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'~' | b'-'))
 }
 fn utc() -> String {
     "UTC".into()

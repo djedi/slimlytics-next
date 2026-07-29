@@ -20,6 +20,12 @@ Version 1 does not use cross-site cookies or fingerprinting. Anonymous identifie
 
 The public collector is authorized only by a site write key and constrained by origin/rate controls. Dashboard/report endpoints require user authentication and site membership. Write keys cannot read analytics. Reporting credentials cannot be embedded in measured websites.
 
+## Generated first-party proxy delivery
+
+Each site stores a closed server type plus validated JavaScript and beacon paths. The dashboard renders server configuration from those structured values rather than storing arbitrary configuration text. The generated proxy exposes exactly two routes on the measured site's domain and strips cookies and authorization before forwarding.
+
+The JavaScript route targets a SvelteKit bootstrap endpoint. Its complete tracker IIFE is embedded into the adapter-node server build as a generated raw artifact, eliminating runtime filesystem and working-directory assumptions. The appended initializer contains the public write key and selects the exact same-origin beacon path. The beacon proxy rewrites that path to the canonical Rust collection endpoint; authenticated reporting routes are never proxied.
+
 ## Monorepo for the application
 
 Backend, dashboard, tracker, migrations, deployment, and technical documentation share one application repository because they evolve under one API contract and release. A possible future public marketing website belongs in a separate repository and deployment lifecycle.

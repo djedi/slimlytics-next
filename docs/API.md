@@ -1,6 +1,6 @@
 # API overview
 
-All JSON endpoints use camelCase fields. Authenticated requests send an `Authorization: Bearer <token>` header. Error responses use a stable machine-readable code and a human-readable message.
+All JSON endpoints use camelCase fields. Authenticated requests send an `Authorization: Bearer ACCESS_TOKEN` header. Error responses use a stable machine-readable code and a human-readable message.
 
 ## System
 
@@ -21,18 +21,27 @@ Passwords are hashed with Argon2. Access tokens are short-lived JWTs signed with
 - `POST /api/sites`
 - `GET /api/sites/{siteId}`
 - `PUT /api/sites/{siteId}`
+- `PUT /api/sites/{siteId}/anti-adblock`
 - `DELETE /api/sites/{siteId}`
 
-A site has a display name, canonical URL, timezone, allowed origins, retention policy, status, and independently rotatable collection write key.
+A site has a display name, canonical URL, timezone, allowed origins, retention policy, status, independently rotatable collection write key, and a persisted anti-adblock server type, JavaScript path, and beacon path. New sites receive random neutral path defaults. The anti-adblock update body is `{ "serverType": "caddy|nginx|apache", "jsPath": "/...js", "beaconPath": "/..." }`.
 
 ## Collection
 
 - `POST /api/collect/{writeKey}`
+- `GET /api/collect/{writeKey}` — non-ingesting proxy diagnostic
 - `POST /api/e/{writeKey}` — neutral anti-adblock alias with identical behavior
+- `GET /api/e/{writeKey}` — non-ingesting legacy-alias diagnostic
 
 The browser tracker sends page views and custom events. The collector accepts `sendBeacon` bodies, applies origin checks, normalizes and redacts URLs, classifies obvious bots/internal traffic, derives site-scoped anonymous identifiers, deduplicates event IDs, and persists accepted events.
 
 A write key authorizes ingestion only. It never grants dashboard or reporting access.
+
+## First-party tracker bootstrap
+
+- `GET /p/{writeKey}/{beaconName}`
+
+Returns the complete JavaScript tracker plus a site initializer targeting the exact same-origin `/{beaconName}` path. The bundle is embedded in the adapter-node build rather than loaded from the runtime working directory. Invalid keys or path names return `400`. See `FIRST_PARTY_PROXY.md` for the dashboard-generated server configurations.
 
 ## Reporting
 

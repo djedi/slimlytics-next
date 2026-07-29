@@ -22,6 +22,7 @@ export type Transport = (url: string, payload: TrackerPayload) => boolean | Prom
 export interface TrackerOptions {
   writeKey: string;
   endpoint?: string;
+  appendWriteKey?: boolean;
   autoTrack?: boolean;
   batchSize?: number;
   batchInterval?: number;
@@ -90,7 +91,8 @@ export function toCollectInput(event: TrackerEvent) {
   };
 }
 
-function collectorUrl(endpoint: string, writeKey: string): string {
+function collectorUrl(endpoint: string, writeKey: string, appendWriteKey = true): string {
+  if (!appendWriteKey) return endpoint;
   if (endpoint.includes('{writeKey}')) return endpoint.replace('{writeKey}', encodeURIComponent(writeKey));
   return `${endpoint.replace(/\/$/, '')}/${encodeURIComponent(writeKey)}`;
 }
@@ -105,7 +107,7 @@ export interface Tracker {
 
 export function createTracker(options: TrackerOptions): Tracker {
   if (!options.writeKey?.trim()) throw new Error('Slimlytics: writeKey is required');
-  const endpoint = collectorUrl(options.endpoint ?? '/api/collect', options.writeKey);
+  const endpoint = collectorUrl(options.endpoint ?? '/api/collect', options.writeKey, options.appendWriteKey);
   const transport = options.transport ?? defaultTransport;
   const queue: TrackerEvent[] = [];
   const queuedIds = new Set<string>();

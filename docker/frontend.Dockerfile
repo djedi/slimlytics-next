@@ -13,6 +13,7 @@ RUN npm ci
 COPY frontend/ ./
 COPY --from=tracker /src/tracker/dist/slimlytics.js ./static/tracker.js
 COPY --from=tracker /src/tracker/dist/slimlytics.js ./static/s.js
+COPY --from=tracker /src/tracker/dist/slimlytics.js ./src/lib/server/generated/tracker.iife.txt
 ARG PUBLIC_API_BASE_URL=/api
 ENV PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 ENV PUBLIC_DEMO_MODE=false

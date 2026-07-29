@@ -121,6 +121,10 @@ pub fn app(state: AppState) -> Router {
             get(get_site).put(update_site).delete(delete_site),
         )
         .route("/api/sites/{site_id}/rotate-key", post(rotate_key))
+        .route(
+            "/api/sites/{site_id}/anti-adblock",
+            axum::routing::put(update_anti_adblock),
+        )
         .route("/api/sites/{site_id}/overview", get(overview))
         .route("/api/sites/{site_id}/reports/{dimension}", get(report))
         .route("/api/sites/{site_id}/visitors", get(list_visitors))
@@ -138,9 +142,12 @@ pub fn app(state: AppState) -> Router {
         .route("/api/sites/{site_id}/stream", get(stream))
         .route(
             "/api/collect/{write_key}",
-            post(collect).options(collect_options),
+            get(collect_test).post(collect).options(collect_options),
         )
-        .route("/api/e/{write_key}", post(collect).options(collect_options))
+        .route(
+            "/api/e/{write_key}",
+            get(collect_test).post(collect).options(collect_options),
+        )
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http())
@@ -238,7 +245,7 @@ async fn list_sites(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Vec<Site>>, ApiError> {
-    Ok(Json(sqlx::query_as("SELECT s.id,s.name,s.domain,s.timezone,s.allowed_origins,s.retention_days,s.write_key,s.created_at FROM sites s JOIN site_memberships m ON m.site_id=s.id WHERE m.user_id=$1 ORDER BY s.created_at").bind(user).fetch_all(&state.pool).await?))
+    Ok(Json(sqlx::query_as("SELECT s.id,s.name,s.domain,s.timezone,s.allowed_origins,s.retention_days,s.write_key,s.anti_adblock_server,s.anti_adblock_js_path,s.anti_adblock_beacon_path,s.created_at FROM sites s JOIN site_memberships m ON m.site_id=s.id WHERE m.user_id=$1 ORDER BY s.created_at").bind(user).fetch_all(&state.pool).await?))
 }
 async fn create_site(
     State(state): State<AppState>,
@@ -247,7 +254,7 @@ async fn create_site(
 ) -> Result<impl IntoResponse, ApiError> {
     validate_site(&input)?;
     let mut tx = state.pool.begin().await?;
-    let site: Site=sqlx::query_as("INSERT INTO sites(name,domain,timezone,allowed_origins,retention_days) VALUES($1,$2,$3,$4,$5) RETURNING id,name,domain,timezone,allowed_origins,retention_days,write_key,created_at").bind(input.name).bind(input.domain).bind(input.timezone).bind(input.allowed_origins).bind(input.retention_days).fetch_one(&mut *tx).await?;
+    let site: Site=sqlx::query_as("INSERT INTO sites(name,domain,timezone,allowed_origins,retention_days) VALUES($1,$2,$3,$4,$5) RETURNING id,name,domain,timezone,allowed_origins,retention_days,write_key,anti_adblock_server,anti_adblock_js_path,anti_adblock_beacon_path,created_at").bind(input.name).bind(input.domain).bind(input.timezone).bind(input.allowed_origins).bind(input.retention_days).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO site_memberships(site_id,user_id,role) VALUES($1,$2,'owner')")
         .bind(site.id)
         .bind(user)
@@ -283,7 +290,7 @@ async fn get_site(
     Ok(Json(fetch_site(&state.pool, site).await?))
 }
 async fn fetch_site(pool: &PgPool, id: Uuid) -> Result<Site, ApiError> {
-    sqlx::query_as("SELECT id,name,domain,timezone,allowed_origins,retention_days,write_key,created_at FROM sites WHERE id=$1").bind(id).fetch_optional(pool).await?.ok_or(ApiError::NotFound)
+    sqlx::query_as("SELECT id,name,domain,timezone,allowed_origins,retention_days,write_key,anti_adblock_server,anti_adblock_js_path,anti_adblock_beacon_path,created_at FROM sites WHERE id=$1").bind(id).fetch_optional(pool).await?.ok_or(ApiError::NotFound)
 }
 async fn update_site(
     State(state): State<AppState>,
@@ -296,6 +303,29 @@ async fn update_site(
     sqlx::query("UPDATE sites SET name=$2,domain=$3,timezone=$4,allowed_origins=$5,retention_days=$6,updated_at=now() WHERE id=$1").bind(site).bind(i.name).bind(i.domain).bind(i.timezone).bind(i.allowed_origins).bind(i.retention_days).execute(&state.pool).await?;
     Ok(Json(fetch_site(&state.pool, site).await?))
 }
+
+async fn update_anti_adblock(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(site): Path<Uuid>,
+    Json(input): Json<AntiAdblockInput>,
+) -> Result<Json<Site>, ApiError> {
+    require_site(&state.pool, user, site, true).await?;
+    input
+        .validate()
+        .map_err(|message| ApiError::BadRequest(message.into()))?;
+    sqlx::query(
+        "UPDATE sites SET anti_adblock_server=$2,anti_adblock_js_path=$3,anti_adblock_beacon_path=$4,updated_at=now() WHERE id=$1",
+    )
+    .bind(site)
+    .bind(input.server_type)
+    .bind(input.js_path)
+    .bind(input.beacon_path)
+    .execute(&state.pool)
+    .await?;
+    Ok(Json(fetch_site(&state.pool, site).await?))
+}
+
 async fn delete_site(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -329,6 +359,37 @@ fn client_ip(headers: &HeaderMap, peer: IpAddr, trust_proxy: bool) -> IpAddr {
     } else {
         peer
     }
+}
+
+async fn collect_test(
+    State(state): State<AppState>,
+    Path(key): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    let allowed: Option<Vec<String>> =
+        sqlx::query_scalar("SELECT allowed_origins FROM sites WHERE write_key=$1")
+            .bind(key)
+            .fetch_optional(&state.pool)
+            .await?;
+    let allowed = allowed.ok_or(ApiError::NotFound)?;
+    let origin = headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok());
+    if origin.is_some() && !origin_allowed(origin, &allowed) {
+        return Err(ApiError::Forbidden);
+    }
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
+    if let Some(origin) = origin {
+        response_headers.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            origin
+                .parse()
+                .map_err(|_| ApiError::BadRequest("invalid origin".into()))?,
+        );
+        response_headers.insert(header::VARY, "Origin".parse().unwrap());
+    }
+    Ok((response_headers, Json(json!({"status":"ok"}))))
 }
 
 #[axum::debug_handler]

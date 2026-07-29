@@ -1,6 +1,8 @@
 export interface TrendPoint { date: string; visitors: number; pageViews: number }
 export interface Overview { visitors: number; sessions: number; pageViews: number; bounceRate: number; avgDuration: number; change: number; currentOnline: number; trend: TrendPoint[] }
-export interface Site { id: string; name: string; domain: string; writeKey: string; timezone?: string; allowedOrigins?: string[]; retentionDays?: number; overview?: Overview }
+export type AntiAdblockServer = 'caddy' | 'nginx' | 'apache';
+export interface AntiAdblockSettings { serverType: AntiAdblockServer; jsPath: string; beaconPath: string }
+export interface Site { id: string; name: string; domain: string; writeKey: string; timezone?: string; allowedOrigins?: string[]; retentionDays?: number; antiAdblockServer: AntiAdblockServer; antiAdblockJsPath: string; antiAdblockBeaconPath: string; overview?: Overview }
 export interface User { id: string; email: string; name?: string }
 export interface AuthResponse { token?: string; accessToken?: string; user: User }
 export interface ReportRow { label: string; value: number; secondary?: string; change?: number }
@@ -13,7 +15,7 @@ export class ApiError extends Error {
 }
 
 type Fetcher = typeof fetch;
-interface WireSite extends Omit<Site, 'writeKey'> { write_key?: string; writeKey?: string }
+interface WireSite extends Omit<Site, 'writeKey' | 'antiAdblockServer' | 'antiAdblockJsPath' | 'antiAdblockBeaconPath'> { write_key?: string; writeKey?: string; antiAdblockServer?: AntiAdblockServer; anti_adblock_server?: AntiAdblockServer; antiAdblockJsPath?: string; anti_adblock_js_path?: string; antiAdblockBeaconPath?: string; anti_adblock_beacon_path?: string }
 interface WireMetric { current: number; previous: number; change_percent?: number | null }
 interface WireOverview { views: WireMetric; visitors: WireMetric; sessions: WireMetric; events: WireMetric }
 interface WireReportRow { value: string; views: number; visitors: number }
@@ -24,13 +26,13 @@ function dates(days: number) {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 function dateQuery(days: number) { const range = dates(days); return `from=${range.from}&to=${range.to}`; }
-function normalizeSite(site: WireSite): Site { return { ...site, writeKey: site.writeKey ?? site.write_key ?? '' }; }
+function normalizeSite(site: WireSite): Site { return { ...site, writeKey: site.writeKey ?? site.write_key ?? '', antiAdblockServer: site.antiAdblockServer ?? site.anti_adblock_server ?? 'caddy', antiAdblockJsPath: site.antiAdblockJsPath ?? site.anti_adblock_js_path ?? '/slimlytics.js', antiAdblockBeaconPath: site.antiAdblockBeaconPath ?? site.anti_adblock_beacon_path ?? '/slimlytics-event' }; }
 const trend = Array.from({ length: 28 }, (_, index) => ({ date: new Date(Date.now() - (27 - index) * 864e5).toISOString().slice(0, 10), visitors: 84 + ((index * 17) % 71), pageViews: 151 + ((index * 29) % 129) }));
 const baseOverview: Overview = { visitors: 3421, sessions: 3892, pageViews: 8754, bounceRate: 38.4, avgDuration: 164, change: 12.8, currentOnline: 14, trend };
 export const demoSites: Site[] = [
-  { id: 'northstar', name: 'Northstar Docs', domain: 'docs.northstar.dev', writeKey: 'wk_demo_docs', overview: baseOverview },
-  { id: 'journal', name: 'Field Journal', domain: 'journal.example.com', writeKey: 'wk_demo_journal', overview: { ...baseOverview, visitors: 1886, pageViews: 5102, currentOnline: 6, change: 4.2 } },
-  { id: 'store', name: 'Little Supply Co.', domain: 'shop.example.com', writeKey: 'wk_demo_shop', overview: { ...baseOverview, visitors: 956, pageViews: 2901, currentOnline: 2, change: -3.7 } }
+  { id: 'northstar', name: 'Northstar Docs', domain: 'docs.northstar.dev', writeKey: 'wk_demo_docs', antiAdblockServer: 'caddy', antiAdblockJsPath: '/a4f20197c631.js', antiAdblockBeaconPath: '/39dab7e081b2', overview: baseOverview },
+  { id: 'journal', name: 'Field Journal', domain: 'journal.example.com', writeKey: 'wk_demo_journal', antiAdblockServer: 'nginx', antiAdblockJsPath: '/b72d91a0f442.js', antiAdblockBeaconPath: '/41f8c02be992', overview: { ...baseOverview, visitors: 1886, pageViews: 5102, currentOnline: 6, change: 4.2 } },
+  { id: 'store', name: 'Little Supply Co.', domain: 'shop.example.com', writeKey: 'wk_demo_shop', antiAdblockServer: 'apache', antiAdblockJsPath: '/c03385e781a9.js', antiAdblockBeaconPath: '/62dea9430bc1', overview: { ...baseOverview, visitors: 956, pageViews: 2901, currentOnline: 2, change: -3.7 } }
 ];
 
 const reportLabels: Record<string, string[]> = {
@@ -75,6 +77,7 @@ export class ApiClient {
     return normalizeSite(await this.request<WireSite>('/sites', { method: 'POST', body: JSON.stringify({ ...site, timezone: 'UTC', retentionDays: 365 }) }, () => ({ ...site, id: crypto.randomUUID(), writeKey: `wk_demo_${Date.now()}` })));
   }
   async updateSite(id: string, site: Partial<Site>) { return normalizeSite(await this.request<WireSite>(`/sites/${id}`, { method: 'PUT', body: JSON.stringify(site) }, () => ({ ...demoSites[0], ...site, id }))); }
+  async updateAntiAdblock(id: string, settings: AntiAdblockSettings) { return normalizeSite(await this.request<WireSite>(`/sites/${id}/anti-adblock`, { method: 'PUT', body: JSON.stringify(settings) }, () => ({ ...demoSites[0], id, antiAdblockServer: settings.serverType, antiAdblockJsPath: settings.jsPath, antiAdblockBeaconPath: settings.beaconPath }))); }
   deleteSite(id: string) { return this.request<void>(`/sites/${id}`, { method: 'DELETE' }, () => undefined); }
   async overview(id: string, days = 28): Promise<Overview> {
     const wire = await this.request<WireOverview>(`/sites/${id}/overview?${dateQuery(days)}`, {}, () => ({ views: { current: baseOverview.pageViews, previous: 0 }, visitors: { current: baseOverview.visitors, previous: 0 }, sessions: { current: baseOverview.sessions, previous: 0 }, events: { current: 0, previous: 0 } }));

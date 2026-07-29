@@ -25,6 +25,8 @@ tracker:
 	npm --prefix tracker run build
 	cp tracker/dist/slimlytics.js frontend/static/tracker.js
 	cp tracker/dist/slimlytics.js frontend/static/s.js
+	mkdir -p frontend/src/lib/server/generated
+	cp tracker/dist/slimlytics.js frontend/src/lib/server/generated/tracker.iife.txt
 
 test: test-backend test-tracker test-frontend
 

@@ -44,6 +44,47 @@ async fn auth_site_goal_and_collection_flow() {
     let site_id = site["id"].as_str().unwrap();
     let site_uuid = uuid::Uuid::parse_str(site_id).unwrap();
     let write_key = site["writeKey"].as_str().unwrap();
+    assert_eq!(site["antiAdblockServer"], "caddy");
+    assert!(site["antiAdblockJsPath"]
+        .as_str()
+        .is_some_and(|path| path.starts_with('/') && path.ends_with(".js") && path.len() == 16));
+    assert!(site["antiAdblockBeaconPath"]
+        .as_str()
+        .is_some_and(|path| path.starts_with('/') && path.len() == 13));
+
+    let updated = router
+        .clone()
+        .oneshot(json_request(
+            "PUT",
+            &format!("/api/sites/{site_id}/anti-adblock"),
+            Some(&token),
+            json!({
+                "serverType":"nginx",
+                "jsPath":"/456bbb63bb86.js",
+                "beaconPath":"/0d31360a3101"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated = body_json(updated.into_body()).await;
+    assert_eq!(updated["antiAdblockServer"], "nginx");
+    assert_eq!(updated["antiAdblockJsPath"], "/456bbb63bb86.js");
+    assert_eq!(updated["antiAdblockBeaconPath"], "/0d31360a3101");
+
+    let mut proxy_test = Request::get(format!("/api/collect/{write_key}"))
+        .body(Body::empty())
+        .unwrap();
+    proxy_test
+        .headers_mut()
+        .insert(header::ORIGIN, "https://example.com".parse().unwrap());
+    let proxy_test = router.clone().oneshot(proxy_test).await.unwrap();
+    assert_eq!(proxy_test.status(), StatusCode::OK);
+    assert_eq!(
+        proxy_test.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "https://example.com"
+    );
+    assert_eq!(body_json(proxy_test.into_body()).await["status"], "ok");
 
     let preflight = Request::builder()
         .method("OPTIONS")

@@ -2,9 +2,9 @@
   import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
   import { Activity, BarChart3, Bell, CalendarDays, ChevronDown, CircleDot, Download, Eye, FileText, Gauge, Goal as GoalIcon, Globe2, LayoutDashboard, LogOut, Menu, Monitor, Moon, Pause, Play, Plus, Search, Settings, Smartphone, Sun, Users, X, Zap } from '@lucide/svelte';
-  import { ApiClient, demoSites, demoReport, type Goal, type LiveEvent, type Overview, type ReportRow, type Site, type Visitor } from '$lib/api';
+  import { ApiClient, demoSites, demoReport, type AntiAdblockSettings, type Goal, type LiveEvent, type Overview, type ReportRow, type Site, type Visitor } from '$lib/api';
   import { applyTheme, duration, sparklinePoints, type Theme } from '$lib/ui';
-  import { trackingCode } from '$lib/tracking-code';
+  import AntiAdblockSettingsPanel from '$lib/components/AntiAdblockSettings.svelte';
   import ReportTable from '$lib/components/ReportTable.svelte';
   import WorldMap from '$lib/components/WorldMap.svelte';
 
@@ -26,7 +26,7 @@
   let days = $state(28); let loading = $state(false); let error = $state(''); let menuOpen = $state(false);
   let overview = $state<Overview | null>(null); let report = $state<ReportRow[]>([]); let visitors = $state<Visitor[]>([]); let events = $state<LiveEvent[]>([]); let goals = $state<Goal[]>([]);
   let paused = $state(false); let spyFilter = $state(''); let selectedVisitor = $state<Visitor | null>(null); let source: EventSource | null = null;
-  let theme = $state<Theme>('system'); let copied = $state(false); let antiAdblock = $state(true); let newGoal = $state(false); let goalName = $state(''); let goalTarget = $state('');
+  let theme = $state<Theme>('system'); let newGoal = $state(false); let goalName = $state(''); let goalTarget = $state('');
   let newSite = $state(false); let siteName = $state(''); let siteDomain = $state(''); let siteError = $state('');
   let token = '';
 
@@ -84,8 +84,13 @@
   }
   function toggleSpy() { paused = !paused; if (paused) source?.close(); else connectSpy(); }
   function updateTheme(next: Theme) { theme = next; localStorage.setItem('slimlytics_theme', next); applyTheme(next); }
-  function snippet() { return site ? trackingCode(typeof location === 'undefined' ? '' : location.origin, site.writeKey, antiAdblock) : ''; }
-  async function copySnippet() { if (!site) return; await navigator.clipboard.writeText(snippet()); copied = true; setTimeout(() => copied = false, 1800); }
+  async function saveAntiAdblock(settings: AntiAdblockSettings) {
+    if (!site) return;
+    const updated = await api.updateAntiAdblock(site.id, settings);
+    const next = { ...updated, overview: site.overview };
+    site = next;
+    sites = sites.map((item) => item.id === next.id ? { ...next, overview: item.overview } : item);
+  }
   async function addGoal() { if (!site || !goalName || !goalTarget) return; const goal = await api.createGoal(site.id, { name: goalName, target: goalTarget, type: 'event' }); goals = [...goals, goal]; newGoal = false; goalName = ''; goalTarget = ''; }
   async function addSite() {
     if (!siteName.trim() || !siteDomain.trim()) return;
@@ -160,7 +165,15 @@
       {:else if view === 'goals'}
         <section class="page-head"><div><p class="eyebrow">Outcomes</p><h2>Goals</h2><p class="muted">Measure the actions that matter, not just clicks.</p></div><button class="primary" onclick={() => newGoal = true}><Plus size={16}/>New goal</button></section><div class="goal-grid">{#each goals as goal}<article class="panel goal-card"><span><GoalIcon/></span><div><small>{goal.type}</small><h3>{goal.name}</h3><code>{goal.target}</code></div><div><strong>{goal.conversions ?? 0}</strong><small>conversions</small></div><div><strong>{goal.conversionRate ?? 0}%</strong><small>conversion rate</small></div></article>{/each}</div>{#if newGoal}<div class="modal-backdrop" role="presentation"><form class="modal" onsubmit={(event) => { event.preventDefault(); void addGoal(); }}><div class="panel-head"><h2>Create goal</h2><button type="button" class="icon-button" onclick={() => newGoal = false}><X/></button></div><label>Goal name<input bind:value={goalName} required placeholder="Newsletter signup"/></label><label>Event name<input bind:value={goalTarget} required placeholder="signup"/></label><div class="modal-actions"><button type="button" class="secondary" onclick={() => newGoal = false}>Cancel</button><button class="primary">Create goal</button></div></form></div>{/if}
       {:else if view === 'settings'}
-        <section class="settings-grid"><div class="panel settings-card"><p class="eyebrow">Appearance</p><h2>Theme</h2><p class="muted">Use your system preference or override it.</p><div class="theme-options">{#each [{id:'light',label:'Light',icon:Sun},{id:'dark',label:'Dark',icon:Moon},{id:'system',label:'System',icon:Smartphone}] as option}<button class:active={theme === option.id} onclick={() => updateTheme(option.id as Theme)}><option.icon/><span>{option.label}</span></button>{/each}</div></div><div class="panel settings-card installation-card"><p class="eyebrow">Installation</p><h2>Tracker snippet</h2><p class="muted">Paste this before the closing <code>&lt;/head&gt;</code> tag.</p><label class="tracking-toggle"><span><strong>Anti-adblock tracking</strong><small>Use neutral script and collection paths to avoid generic analytics filter rules.</small></span><input type="checkbox" bind:checked={antiAdblock}/><i aria-hidden="true"></i></label><p class="privacy-note">This improves delivery without overriding consent, Do Not Track, or Global Privacy Control.</p><pre><code>{snippet()}</code></pre><button class="secondary" onclick={copySnippet}>{copied ? 'Copied!' : 'Copy snippet'}</button></div><div class="panel settings-card"><p class="eyebrow">Site profile</p><h2>{site.name}</h2><dl><div><dt>Domain</dt><dd>{site.domain}</dd></div><div><dt>Write key</dt><dd><code>{site.writeKey}</code></dd></div><div><dt>Timezone</dt><dd>{site.timezone ?? 'UTC'}</dd></div></dl></div></section>
+        <section class="settings-grid">
+          <div class="panel settings-card"><p class="eyebrow">Appearance</p><h2>Theme</h2><p class="muted">Use your system preference or override it.</p><div class="theme-options">{#each [{id:'light',label:'Light',icon:Sun},{id:'dark',label:'Dark',icon:Moon},{id:'system',label:'System',icon:Smartphone}] as option}<button class:active={theme === option.id} onclick={() => updateTheme(option.id as Theme)}><option.icon/><span>{option.label}</span></button>{/each}</div></div>
+          <div class="panel settings-card"><p class="eyebrow">Site profile</p><h2>{site.name}</h2><dl><div><dt>Domain</dt><dd>{site.domain}</dd></div><div><dt>Write key</dt><dd><code>{site.writeKey}</code></dd></div><div><dt>Timezone</dt><dd>{site.timezone ?? 'UTC'}</dd></div></dl></div>
+          <div class="panel settings-card installation-card">
+            {#key site.id}
+              <AntiAdblockSettingsPanel {site} analyticsOrigin={typeof location === 'undefined' ? 'https://slimlytics.com' : location.origin} save={saveAntiAdblock}/>
+            {/key}
+          </div>
+        </section>
       {/if}
     </main>
   </div>

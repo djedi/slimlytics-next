@@ -65,8 +65,12 @@ jobs:
         run: npm --prefix tracker test -- --run && npm --prefix tracker run check && npm --prefix tracker run build
       - name: Install frontend
         run: npm --prefix frontend ci
-      - name: Copy tracker artifact
-        run: cp tracker/dist/slimlytics.js frontend/static/tracker.js
+      - name: Copy tracker artifacts
+        run: |
+          cp tracker/dist/slimlytics.js frontend/static/tracker.js
+          cp tracker/dist/slimlytics.js frontend/static/s.js
+          mkdir -p frontend/src/lib/server/generated
+          cp tracker/dist/slimlytics.js frontend/src/lib/server/generated/tracker.iife.txt
       - name: Check, test, and build frontend
         run: npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run build
 

@@ -91,6 +91,21 @@ describe('tracker', () => {
     });
     expect(trackerOptionsFromScript(document.createElement('script'))).toBeUndefined();
   });
+
+  it('can send to an exact first-party beacon path without appending the write key', async () => {
+    const urls: string[] = [];
+    const tracker = createTracker({
+      writeKey: 'site-key',
+      endpoint: '/0d31360a3101',
+      appendWriteKey: false,
+      autoTrack: false,
+      transport: async (url) => { urls.push(url); return true; }
+    });
+    tracker.page();
+    await tracker.flush();
+    expect(urls).toEqual(['/0d31360a3101']);
+    tracker.destroy();
+  });
 });
 
 describe('default transport', () => {
