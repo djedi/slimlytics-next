@@ -6,6 +6,7 @@
 **/build
 **/dist
 frontend/static/tracker.js
+frontend/static/s.js
 
 # Environment and secrets
 .env

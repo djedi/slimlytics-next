@@ -140,6 +140,7 @@ pub fn app(state: AppState) -> Router {
             "/api/collect/{write_key}",
             post(collect).options(collect_options),
         )
+        .route("/api/e/{write_key}", post(collect).options(collect_options))
         .layer(PropagateRequestIdLayer::x_request_id())
         .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
         .layer(TraceLayer::new_for_http())

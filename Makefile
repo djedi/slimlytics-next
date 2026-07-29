@@ -24,6 +24,7 @@ env:
 tracker:
 	npm --prefix tracker run build
 	cp tracker/dist/slimlytics.js frontend/static/tracker.js
+	cp tracker/dist/slimlytics.js frontend/static/s.js
 
 test: test-backend test-tracker test-frontend
 
@@ -58,4 +59,4 @@ logs:
 
 clean:
 	cargo clean --manifest-path backend/Cargo.toml
-	rm -rf frontend/.svelte-kit frontend/build tracker/dist frontend/static/tracker.js
+	rm -rf frontend/.svelte-kit frontend/build tracker/dist frontend/static/tracker.js frontend/static/s.js

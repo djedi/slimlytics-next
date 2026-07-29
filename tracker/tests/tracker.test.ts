@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTracker, redactUrl, toCollectInput } from '../src/index';
+import { createTracker, redactUrl, toCollectInput, trackerOptionsFromScript } from '../src/index';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -72,6 +72,24 @@ describe('tracker', () => {
     expect(events.some((event: { name?: string }) => event.name === 'outbound')).toBe(true);
     expect(JSON.stringify(events)).not.toContain('private');
     tracker.destroy();
+  });
+
+  it('bootstraps options from installation script attributes', () => {
+    const script = document.createElement('script');
+    script.dataset.writeKey = 'wk_anti';
+    script.dataset.endpoint = 'https://analytics.example/api/e';
+    script.dataset.autoTrack = 'false';
+    script.dataset.respectDnt = 'true';
+    script.dataset.consent = 'denied';
+
+    expect(trackerOptionsFromScript(script)).toEqual({
+      writeKey: 'wk_anti',
+      endpoint: 'https://analytics.example/api/e',
+      autoTrack: false,
+      respectDnt: true,
+      consent: 'denied'
+    });
+    expect(trackerOptionsFromScript(document.createElement('script'))).toBeUndefined();
   });
 });
 

@@ -217,17 +217,20 @@ export const page = (properties?: EventProperties) => singleton?.page(properties
 export const event = (name: string, properties?: EventProperties) => singleton?.event(name, properties);
 export const consent = (value: Consent) => singleton?.consent(value);
 
+export function trackerOptionsFromScript(script: HTMLScriptElement | null): TrackerOptions | undefined {
+  const writeKey = script?.dataset.writeKey?.trim();
+  if (!script || !writeKey) return undefined;
+  return {
+    writeKey,
+    endpoint: script.dataset.endpoint || '/api/collect',
+    autoTrack: script.dataset.autoTrack !== 'false',
+    respectDnt: script.dataset.respectDnt !== 'false',
+    consent: script.dataset.consent === 'denied' ? 'denied' : 'granted'
+  };
+}
+
 if (typeof window !== 'undefined') {
   (window as typeof window & { Slimlytics?: unknown }).Slimlytics = { init, page, event, consent, createTracker };
-  const script = document.currentScript as HTMLScriptElement | null;
-  const writeKey = script?.dataset.writeKey;
-  if (writeKey) {
-    init({
-      writeKey,
-      endpoint: script.dataset.endpoint || '/api/collect',
-      autoTrack: script.dataset.autoTrack !== 'false',
-      respectDnt: script.dataset.respectDnt !== 'false',
-      consent: script.dataset.consent === 'denied' ? 'denied' : 'granted'
-    });
-  }
+  const options = trackerOptionsFromScript(document.currentScript as HTMLScriptElement | null);
+  if (options) init(options);
 }

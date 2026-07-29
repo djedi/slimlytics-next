@@ -15,6 +15,7 @@ This repository is a ground-up rewrite. It does not replace or rewrite the histo
 - Cookieless tracking by default
 - Sensitive query-parameter redaction and no form capture
 - First-party tracker delivery to reduce accidental blocking
+- Optional anti-adblock installation code with neutral script and collection paths
 - Responsive Svelte interface with light, dark, and system themes
 - Docker Compose deployment with PostgreSQL and Caddy
 

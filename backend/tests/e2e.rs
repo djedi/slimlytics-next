@@ -47,7 +47,7 @@ async fn auth_site_goal_and_collection_flow() {
 
     let preflight = Request::builder()
         .method("OPTIONS")
-        .uri(format!("/api/collect/{write_key}"))
+        .uri(format!("/api/e/{write_key}"))
         .header(header::ORIGIN, "https://example.com")
         .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
         .body(Body::empty())
@@ -73,7 +73,7 @@ async fn auth_site_goal_and_collection_flow() {
 
     let mut collect = json_request(
         "POST",
-        &format!("/api/collect/{write_key}"),
+        &format!("/api/e/{write_key}"),
         None,
         json!({"name":"signup","url":"https://example.com/thanks?utm_source=newsletter&email=private@example.com#secret"}),
     );

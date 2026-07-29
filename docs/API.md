@@ -28,6 +28,7 @@ A site has a display name, canonical URL, timezone, allowed origins, retention p
 ## Collection
 
 - `POST /api/collect/{writeKey}`
+- `POST /api/e/{writeKey}` — neutral anti-adblock alias with identical behavior
 
 The browser tracker sends page views and custom events. The collector accepts `sendBeacon` bodies, applies origin checks, normalizes and redacts URLs, classifies obvious bots/internal traffic, derives site-scoped anonymous identifiers, deduplicates event IDs, and persists accepted events.
 

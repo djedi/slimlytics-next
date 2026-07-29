@@ -31,3 +31,17 @@ async fn protected_routes_require_bearer_token() {
         .unwrap();
     assert_eq!(response.status(), 401);
 }
+
+#[tokio::test]
+async fn neutral_collection_alias_is_routed() {
+    let response = app(state())
+        .oneshot(
+            Request::post("/api/e/not-a-uuid")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 400);
+}
