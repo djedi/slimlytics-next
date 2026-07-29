@@ -1,0 +1,22 @@
+{
+  "name": "@slimlytics/tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["dist"],
+  "main": "dist/slimlytics.js",
+  "module": "dist/slimlytics.es.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "vitest",
+    "check": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.1.4"
+  }
+}

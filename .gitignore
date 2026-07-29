@@ -1,0 +1,30 @@
+# Build artifacts
+/target
+**/target
+**/node_modules
+**/.svelte-kit
+**/build
+**/dist
+frontend/static/tracker.js
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Local data and backups
+postgres-data/
+backups/*.sql*

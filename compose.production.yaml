@@ -1,0 +1,25 @@
+services:
+  backend:
+    environment:
+      SLIMLYTICS_BASE_URL: https://${SLIMLYTICS_DOMAIN:?Set SLIMLYTICS_DOMAIN in .env}
+
+  frontend:
+    environment:
+      ORIGIN: https://${SLIMLYTICS_DOMAIN:?Set SLIMLYTICS_DOMAIN in .env}
+
+  caddy:
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SLIMLYTICS_DOMAIN: ${SLIMLYTICS_DOMAIN:?Set SLIMLYTICS_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    volumes:
+      - ./docker/Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

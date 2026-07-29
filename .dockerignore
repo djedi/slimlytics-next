@@ -1,0 +1,14 @@
+.git
+.github
+.hermes
+.env
+.env.*
+!.env.example
+**/target
+**/node_modules
+**/.svelte-kit
+**/build
+**/dist
+coverage
+backups
+.DS_Store

@@ -1,0 +1,123 @@
+name: slimlytics
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-slimlytics}
+      POSTGRES_USER: ${POSTGRES_USER:-slimlytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+    logging: &default-logging
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 200
+    networks:
+      - database
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    environment:
+      SLIMLYTICS_BIND: 0.0.0.0:8080
+      SLIMLYTICS_BASE_URL: ${SLIMLYTICS_BASE_URL:-http://localhost:8080}
+      DATABASE_URL: postgres://${POSTGRES_USER:-slimlytics}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-slimlytics}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      VISITOR_HASH_SECRET: ${VISITOR_HASH_SECRET:?Set VISITOR_HASH_SECRET in .env}
+      ACCESS_TOKEN_TTL_SECONDS: ${ACCESS_TOKEN_TTL_SECONDS:-3600}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      RUST_LOG: ${RUST_LOG:-slimlytics=info,tower_http=info}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 1.0
+    pids_limit: 200
+    networks:
+      - edge
+      - database
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        PUBLIC_API_BASE_URL: /api
+    restart: unless-stopped
+    environment:
+      ORIGIN: ${ORIGIN:-http://localhost:8080}
+      HOST: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.75
+    pids_limit: 150
+    networks:
+      - edge
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      # Safe default for development and external reverse proxies: loopback only.
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 100
+    networks:
+      - edge
+
+volumes:
+  postgres-data:
+
+networks:
+  edge:
+  database:
+    internal: true

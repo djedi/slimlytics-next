@@ -1,0 +1,21 @@
+# Attach Slimlytics' internal Caddy service to an existing reverse-proxy network.
+# Usage: docker compose -f compose.yaml -f compose.proxy.yaml up -d
+services:
+  backend:
+    environment:
+      SLIMLYTICS_BASE_URL: https://${SLIMLYTICS_DOMAIN:?Set SLIMLYTICS_DOMAIN in .env}
+      TRUST_PROXY: "true"
+  frontend:
+    environment:
+      ORIGIN: https://${SLIMLYTICS_DOMAIN:?Set SLIMLYTICS_DOMAIN in .env}
+  caddy:
+    networks:
+      edge:
+      external-proxy:
+        aliases:
+          - slimlytics-upstream
+
+networks:
+  external-proxy:
+    external: true
+    name: ${PROXY_NETWORK:-caddy_default}
