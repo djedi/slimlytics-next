@@ -12,7 +12,7 @@ use crate::{
 use axum::{
     extract::{ConnectInfo, FromRequestParts, Path, Query, State},
     http::{header, request::Parts, HeaderMap, StatusCode},
-    response::{sse::Event, IntoResponse, Sse},
+    response::{sse::Event, IntoResponse, Redirect, Sse},
     routing::{delete, get, post},
     Json, Router,
 };
@@ -144,6 +144,8 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/ready", get(ready))
+        .route("/api/openapi.json", get(openapi_document))
+        .route("/api/docs", get(scalar_docs))
         .route("/api/auth/register", post(register))
         .route("/api/auth/login", post(login))
         .route("/api/auth/me", get(me))
@@ -198,6 +200,19 @@ pub fn app(state: AppState) -> Router {
 async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status":"ok"})))
 }
+
+const OPENAPI_JSON: &str = include_str!("../../docs/openapi.json");
+async fn openapi_document() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/vnd.oai.openapi+json")],
+        OPENAPI_JSON,
+    )
+}
+
+async fn scalar_docs() -> Redirect {
+    Redirect::temporary("/docs/api")
+}
+
 async fn ready(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     sqlx::query("SELECT 1").execute(&state.pool).await?;
     Ok(Json(json!({"status":"ready"})))
@@ -566,10 +581,10 @@ async fn rotate_key(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(site): Path<Uuid>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<WriteKeyResponse>, ApiError> {
     require_site(&state.pool, user, site, true).await?;
     let key:Uuid=sqlx::query_scalar("UPDATE sites SET write_key=gen_random_uuid(),updated_at=now() WHERE id=$1 RETURNING write_key").bind(site).fetch_one(&state.pool).await?;
-    Ok(Json(json!({"write_key":key})))
+    Ok(Json(WriteKeyResponse { write_key: key }))
 }
 
 fn client_ip(headers: &HeaderMap, peer: IpAddr, trust_proxy: bool) -> IpAddr {

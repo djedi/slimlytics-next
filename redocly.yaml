@@ -1,0 +1,8 @@
+extends:
+  - recommended
+
+rules:
+  # /api/docs is intentionally a 307 into the locally bundled Scalar UI.
+  operation-2xx-response: off
+  # Liveness, readiness, and static documentation endpoints have no client-error path.
+  operation-4xx-response: off

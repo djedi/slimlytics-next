@@ -1,4 +1,15 @@
-use slimlytics_backend::models::{AntiAdblockInput, CollectInput};
+use slimlytics_backend::models::{AntiAdblockInput, CollectInput, WriteKeyResponse};
+
+#[test]
+fn write_key_response_uses_the_documented_camel_case_wire_name() {
+    let response = WriteKeyResponse {
+        write_key: uuid::Uuid::nil(),
+    };
+    assert_eq!(
+        serde_json::to_value(response).unwrap(),
+        serde_json::json!({"writeKey": "00000000-0000-0000-0000-000000000000"})
+    );
+}
 
 #[test]
 fn omitted_custom_properties_default_to_object() {

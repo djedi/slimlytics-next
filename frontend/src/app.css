@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
 :root{font-family:'DM Sans',system-ui,sans-serif;color-scheme:light dark;--bg:#f4f6f8;--surface:#fff;--surface-2:#f8fafb;--sidebar:#101722;--text:#17202d;--muted:#697586;--line:#e3e8ee;--accent:#12a97c;--accent-2:#0e8a69;--blue:#4f7cff;--red:#e05260;--shadow:0 8px 30px rgba(21,32,45,.07)}
 :root[data-theme='dark']{color-scheme:dark;--bg:#0b1018;--surface:#121a25;--surface-2:#17212e;--sidebar:#070b11;--text:#e8edf3;--muted:#93a0b2;--line:#253141;--accent:#21c994;--blue:#7797ff;--shadow:0 8px 30px rgba(0,0,0,.25)}
 :root[data-theme='light']{color-scheme:light} @media(prefers-color-scheme:dark){:root:not([data-theme]){--bg:#0b1018;--surface:#121a25;--surface-2:#17212e;--sidebar:#070b11;--text:#e8edf3;--muted:#93a0b2;--line:#253141;--accent:#21c994;--blue:#7797ff;--shadow:0 8px 30px rgba(0,0,0,.25)}}

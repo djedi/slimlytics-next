@@ -129,6 +129,7 @@
         <button class="primary wide" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
       </form>
       <p class="auth-switch">{authMode === 'login' ? 'New to Slimlytics?' : 'Already have an account?'} <button onclick={() => authMode = authMode === 'login' ? 'register' : 'login'}>{authMode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
+      <p class="auth-switch"><a href="/docs/cli">CLI documentation</a> · <a href="/api/docs">API reference</a></p>
       {#if demo}<div class="divider"><span>or</span></div><button class="secondary wide" onclick={exploreDemo}>Explore the demo dashboard</button>{/if}
     </section>
   </main>

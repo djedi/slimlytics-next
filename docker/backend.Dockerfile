@@ -3,6 +3,7 @@ FROM rust:1.97-bookworm AS builder
 WORKDIR /src
 COPY backend/Cargo.toml backend/Cargo.lock* ./backend/
 COPY backend/src ./backend/src
+COPY docs/openapi.json ./docs/openapi.json
 COPY migrations ./migrations
 WORKDIR /src/backend
 RUN cargo build --locked --release

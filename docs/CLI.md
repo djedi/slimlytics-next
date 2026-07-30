@@ -7,11 +7,11 @@ The `slimlytics` CLI authenticates to a Slimlytics account, manages personal API
 Requirements: `cargo`, `curl`, and `tar`. The installer downloads this repository and performs a locked Cargo build:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.1.1/scripts/install-cli.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.2.0/scripts/install-cli.sh | sh
 slimlytics --version
 ```
 
-Cargo installs the binary under `${CARGO_HOME:-$HOME/.cargo}/bin`. Set `SLIMLYTICS_CLI_REF` to install another branch from its source archive.
+Cargo installs the binary under `${CARGO_HOME:-$HOME/.cargo}/bin`. The installer defaults to the pinned `cli-v0.2.0` release tag; set `SLIMLYTICS_CLI_REF` to intentionally install another source ref. The canonical command remains `slimlytics`: the shorter `slim` command is already owned by the popular 23,000-star SlimToolkit project and would create a real installation collision.
 
 Developers can install directly from a checkout:
 

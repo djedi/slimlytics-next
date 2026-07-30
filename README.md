@@ -108,7 +108,7 @@ The tracker never captures form values. Cookieless tracking, Do Not Track, and G
 Install the `slimlytics` binary with Rust's Cargo:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.1.1/scripts/install-cli.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.2.0/scripts/install-cli.sh | sh
 slimlytics auth login --email you@example.com
 ```
 
@@ -120,7 +120,7 @@ The idempotent command intended for AI agents creates or reuses a domain and ret
 slimlytics --json site ensure example.com --server caddy
 ```
 
-See `docs/CLI.md` for Nginx/Apache examples, token revocation, noninteractive authentication, and the agent contract.
+The complete public guide is available at `https://slimlytics.com/docs/cli`; `docs/CLI.md` is the repository copy. The interactive Scalar API reference is at `https://slimlytics.com/api/docs`, backed by the downloadable OpenAPI 3.1 document at `https://slimlytics.com/api/openapi.json`.
 
 ## Operations
 
@@ -158,6 +158,7 @@ See `SECURITY.md` for reporting and deployment guidance.
 - `docs/ARCHITECTURE.md`
 - `docs/REQUIREMENTS.md`
 - `docs/API.md`
+- `docs/openapi.json`
 - `docs/PRIVACY.md`
 - `docs/PERFORMANCE.md`
 - `docs/FIRST_PARTY_PROXY.md`

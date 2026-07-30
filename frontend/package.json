@@ -12,7 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.27.0"
+    "@lucide/svelte": "^1.27.0",
+    "@scalar/api-reference": "1.63.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.2.12",

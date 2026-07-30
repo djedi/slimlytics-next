@@ -1,6 +1,12 @@
 # API overview
 
-All JSON endpoints use camelCase fields. Authenticated requests send an `Authorization: Bearer <token>` header. Error responses use a stable machine-readable code and a human-readable message.
+Interactive Scalar reference: `https://slimlytics.com/api/docs`
+
+OpenAPI 3.1 JSON: `https://slimlytics.com/api/openapi.json`
+
+The OpenAPI document is the machine-readable public contract and covers every authentication, account-token, site/settings, collection, reporting, goal, export, real-time, and first-party tracker route.
+
+Account, token, site, goal, and collection request/response objects use camelCase fields. Reporting schemas retain their documented wire names where the backend returns fields such as `change_percent` or `occurred_at`. Authenticated requests send an `Authorization: Bearer <token>` header. Error responses use a stable machine-readable code and a human-readable message.
 
 ## System
 
