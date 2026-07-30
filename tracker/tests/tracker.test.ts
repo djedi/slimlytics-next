@@ -129,14 +129,31 @@ describe('default transport', () => {
     });
   });
 
-  it('uses sendBeacon before fetch', async () => {
+  it('prefers fetch with JSON content-type over sendBeacon', async () => {
     const beacon = vi.fn().mockReturnValue(true);
     Object.defineProperty(navigator, 'sendBeacon', { value: beacon, configurable: true });
-    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 202 }));
     const tracker = createTracker({ writeKey: 'wk', autoTrack: false });
     tracker.event('ping');
     await tracker.flush();
-    expect(beacon).toHaveBeenCalledOnce();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      keepalive: true,
+      credentials: 'omit'
+    });
+    expect(beacon).not.toHaveBeenCalled();
+  });
+
+  it('omits blank referrers from the collector payload', () => {
+    const mapped = toCollectInput({
+      id: 'event-2',
+      type: 'page',
+      timestamp: '2026-07-29T00:00:00Z',
+      url: 'https://example.com/',
+      referrer: '   '
+    });
+    expect(mapped.referrer).toBeUndefined();
   });
 });

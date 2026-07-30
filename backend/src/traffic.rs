@@ -75,3 +75,25 @@ pub fn client_metadata(user_agent: &str) -> (&'static str, &'static str) {
 pub fn origin_allowed(origin: Option<&str>, allowed: &[String]) -> bool {
     origin.is_some_and(|value| allowed.iter().any(|allowed| allowed == value))
 }
+
+/// Allow collection when Origin matches, or when Origin is absent but Referer is an allowlisted origin.
+/// Some mobile browsers omit Origin on same-origin beacon/fetch while still sending Referer.
+pub fn collection_origin_allowed(
+    origin: Option<&str>,
+    referer: Option<&str>,
+    allowed: &[String],
+) -> bool {
+    if origin_allowed(origin, allowed) {
+        return true;
+    }
+    if origin.is_some() {
+        return false;
+    }
+    referer
+        .and_then(|value| url::Url::parse(value).ok())
+        .and_then(|url| {
+            let host = url.host_str()?;
+            Some(format!("{}://{}", url.scheme(), host))
+        })
+        .is_some_and(|ref_origin| allowed.iter().any(|item| item == &ref_origin))
+}

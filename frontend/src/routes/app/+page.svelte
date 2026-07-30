@@ -112,7 +112,22 @@
     api.setToken(token || 'demo');
     ready = true;
     void loadSites();
-    return () => source?.close();
+    // Keep stats fresh while the dashboard stays open (e.g. phone browsing + desktop dashboard).
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || loading) return;
+      if (!site) void refreshSitesQuietly().catch(() => {});
+      else if (view !== 'settings') void refreshViewQuietly().catch(() => {});
+    };
+    const interval = window.setInterval(refresh, 15_000);
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      source?.close();
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   });
 
   function logout() {
@@ -124,21 +139,24 @@
     loading = true;
     error = '';
     try {
-      const loaded = await api.sites();
-      sites = await Promise.all(
-        loaded.map(async (item) => {
-          try {
-            return { ...item, overview: await api.overview(item.id, days) };
-          } catch {
-            return item;
-          }
-        })
-      );
+      await refreshSitesQuietly();
     } catch (reason) {
       error = reason instanceof Error ? reason.message : 'Could not load sites.';
     } finally {
       loading = false;
     }
+  }
+  async function refreshSitesQuietly() {
+    const loaded = await api.sites();
+    sites = await Promise.all(
+      loaded.map(async (item) => {
+        try {
+          return { ...item, overview: await api.overview(item.id, days) };
+        } catch {
+          return item;
+        }
+      })
+    );
   }
   async function selectSite(next: Site) {
     site = next;
@@ -157,28 +175,36 @@
     error = '';
     source?.close();
     try {
-      if (view === 'overview') {
-        const [nextOverview, pages, referrers] = await Promise.all([
-          api.overview(site.id, days),
-          api.report(site.id, 'pages', days),
-          api.report(site.id, 'referrers', days)
-        ]);
-        overview = nextOverview;
-        topPages = (demo ? demoReport('pages') : pages).slice(0, 5);
-        topReferrers = (demo ? demoReport('referrers') : referrers).slice(0, 5);
-      } else if (['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view))
-        report = await api.report(site.id, view, days);
-      else if (view === 'visitors') visitors = await api.visitors(site.id);
-      else if (view === 'spy') {
-        events = await api.events(site.id);
-        visitors = await api.visitors(site.id);
-        connectSpy();
-      } else if (view === 'goals') goals = await api.goals(site.id);
+      await refreshViewQuietly(true);
     } catch (reason) {
       error = reason instanceof Error ? reason.message : 'Could not load analytics.';
     } finally {
       loading = false;
     }
+  }
+  async function refreshViewQuietly(resetStream = false) {
+    if (!site) return;
+    if (view === 'overview') {
+      const [nextOverview, pages, referrers] = await Promise.all([
+        api.overview(site.id, days),
+        api.report(site.id, 'pages', days),
+        api.report(site.id, 'referrers', days)
+      ]);
+      overview = nextOverview;
+      topPages = (demo ? demoReport('pages') : pages).slice(0, 5);
+      topReferrers = (demo ? demoReport('referrers') : referrers).slice(0, 5);
+      // Keep sidebar "online now" in sync.
+      sites = sites.map((item) =>
+        item.id === site?.id ? { ...item, overview: nextOverview } : item
+      );
+    } else if (['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view))
+      report = await api.report(site.id, view, days);
+    else if (view === 'visitors') visitors = await api.visitors(site.id);
+    else if (view === 'spy') {
+      events = await api.events(site.id);
+      visitors = await api.visitors(site.id);
+      if (resetStream || !source || source.readyState === EventSource.CLOSED) connectSpy();
+    } else if (view === 'goals') goals = await api.goals(site.id);
   }
   function connectSpy() {
     if (!site || paused || typeof EventSource === 'undefined' || demo) return;

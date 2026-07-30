@@ -7,7 +7,9 @@ use crate::{
     identity::derive_ids,
     models::*,
     privacy::sanitize_url,
-    traffic::{client_metadata, origin_allowed, traffic_class, RateLimiter},
+    traffic::{
+        client_metadata, collection_origin_allowed, origin_allowed, traffic_class, RateLimiter,
+    },
 };
 use axum::{
     extract::{ConnectInfo, FromRequestParts, Path, Query, State},
@@ -646,7 +648,8 @@ async fn collect(
             .await?;
     let (site, allowed) = site.ok_or(ApiError::NotFound)?;
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
-    if !origin_allowed(origin, &allowed) {
+    let referer = headers.get(header::REFERER).and_then(|v| v.to_str().ok());
+    if !collection_origin_allowed(origin, referer, &allowed) {
         return Err(ApiError::Forbidden);
     }
     let ip = client_ip(&headers, peer.ip(), state.trust_proxy);
@@ -675,6 +678,8 @@ async fn collect(
     let referrer = input
         .referrer
         .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         .map(sanitize_url)
         .transpose()
         .map_err(|_| ApiError::BadRequest("invalid referrer".into()))?;

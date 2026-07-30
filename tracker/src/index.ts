@@ -63,28 +63,37 @@ function privacySignal(): boolean {
 async function defaultTransport(url: string, payload: TrackerPayload): Promise<boolean> {
   const results = await Promise.all(payload.events.map(async (event) => {
     const body = JSON.stringify(toCollectInput(event));
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      if (navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return true;
+    // Prefer fetch: Safari sendBeacon has historically dropped or mishandled
+    // application/json Content-Type while still returning true.
+    if (typeof fetch === 'function') {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+          keepalive: true,
+          credentials: 'omit'
+        });
+        if (response.ok) return true;
+      } catch {
+        /* fall through to sendBeacon */
+      }
     }
-    if (typeof fetch !== 'function') return false;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body,
-      keepalive: true,
-      credentials: 'omit'
-    });
-    return response.ok;
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      return navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+    }
+    return false;
   }));
   return results.every(Boolean);
 }
 
 export function toCollectInput(event: TrackerEvent) {
+  const referrer = event.referrer?.trim() ? event.referrer : undefined;
   return {
     name: event.type === 'page' ? 'pageview' : event.name,
     url: event.url,
     title: event.title,
-    referrer: event.referrer,
+    referrer,
     occurredAt: event.timestamp,
     properties: event.properties ?? {},
     screenWidth: typeof screen === 'undefined' ? undefined : screen.width
