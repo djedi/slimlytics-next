@@ -124,6 +124,16 @@ The complete public guide is available at `https://slimlytics.com/docs/cli`; `do
 
 ## Operations
 
+Production releases use the guarded deployment script:
+
+```bash
+make deploy
+```
+
+The script requires a clean `main` branch whose HEAD is already pushed to `origin/main`. It connects through the dedicated `slimdeploy` account, requires canonical-path and repository-sentinel checks before any synchronization, runs the complete local test/check/build suite with a lockfile-pinned OpenAPI validator, creates a verified PostgreSQL backup and a source rollback snapshot, synchronizes source while preserving production `.env` and backups, applies `compose.yaml` with the production `compose.proxy.yaml` overlay, and verifies health, readiness, the exact OpenAPI contract, redirect behavior, and the deployed Scalar stylesheet. A failed deployment automatically restores the prior source snapshot, reapplies Compose, and waits for healthy services.
+
+Manual backup and guarded restore remain available:
+
 ```bash
 ./scripts/backup.sh
 ./scripts/restore.sh backups/slimlytics-YYYYMMDDTHHMMSSZ.sql.gz

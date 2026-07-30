@@ -48,6 +48,18 @@ Set `SLIMLYTICS_DOMAIN` to the public hostname, then point the external proxy at
 
 ## Upgrades
 
+For the managed `slimlytics.com` deployment, commit and push a clean `main` branch, then run:
+
+```bash
+make deploy
+```
+
+The deployment script connects through a dedicated `slimdeploy` SSH account, not root. The canonical production directory must contain a tracked `.slimlytics-deployment` sentinel whose content is `slimlytics-production-v1`; both conditions are checked before any recursive synchronization. The deploy user needs source ownership, Docker access, write access to `backups/` and the sibling `.slimlytics-releases/` snapshot directory, and group-read access to the root-owned `.env` (`0640`). Do not weaken the path or sentinel checks to accommodate another deployment layout—set the documented environment overrides and prepare that target deliberately.
+
+The deployment script runs local gates with a lockfile-pinned Redocly CLI, acquires a token-verified remote deployment lock to prevent overlapping releases, creates a verified database backup and retained source snapshot, preserves production `.env`/backups, applies the complete `compose.yaml` + `compose.proxy.yaml` project with health waiting (preserving the external `caddy_default` route), verifies the internal listener and exact public documentation/API artifacts, and automatically restores/reapplies the source snapshot if deployment fails. Its host, path, public URL, and source-snapshot retention are configurable through the `SLIMLYTICS_DEPLOY_*`, `SLIMLYTICS_PUBLIC_URL`, and `SLIMLYTICS_RETAIN_RELEASES` environment variables documented by `scripts/deploy-production.sh --help`.
+
+For an unmanaged installation:
+
 1. Read release notes and migration notes.
 2. Create and verify a backup.
 3. Pull the desired tag.
@@ -58,7 +70,9 @@ Set `SLIMLYTICS_DOMAIN` to the public hostname, then point the external proxy at
 
 ## Rollback
 
-Application rollback is `git checkout <previous-tag>` followed by a rebuild. Database rollback requires restoring the pre-upgrade backup whenever a migration is not backward compatible. Never attempt to reverse a destructive migration by improvising SQL against production.
+The managed deployment script automatically restores its retained source snapshot and rebuilds backend/frontend if a release fails. Database backups are never automatically restored because a database rollback is a separate destructive decision.
+
+For an unmanaged installation, application rollback is `git checkout <previous-tag>` followed by a rebuild. Database rollback requires restoring the pre-upgrade backup whenever a migration is not backward compatible. Never attempt to reverse a destructive migration by improvising SQL against production.
 
 ## Retention
 

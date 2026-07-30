@@ -1,4 +1,5 @@
 <script lang="ts">
+  import '@scalar/api-reference/style.css';
   import { onMount } from 'svelte';
 
   let loadError = $state(false);

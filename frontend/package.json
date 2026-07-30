@@ -16,6 +16,7 @@
     "@scalar/api-reference": "1.63.0"
   },
   "devDependencies": {
+    "@redocly/cli": "2.42.0",
     "@sveltejs/adapter-node": "^5.2.12",
     "@sveltejs/kit": "^2.22.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
