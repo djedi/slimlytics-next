@@ -57,7 +57,7 @@ docker compose ps
 curl --fail http://localhost:8080/health
 ```
 
-Open http://localhost:8080, register the first user, create a site, and copy its generated tracking snippet. The default listener is deliberately loopback-only and is suitable for local use or an existing TLS reverse proxy.
+Open http://localhost:8080 for the public marketing site. Create an account at `/register` (or sign in at `/login`), then use the dashboard at `/app` to add a site and copy its generated tracking snippet. Pricing and privacy pages live at `/pricing` and `/privacy`. The default listener is deliberately loopback-only and is suitable for local use or an existing TLS reverse proxy.
 
 For a public VPS where this stack should terminate TLS itself, point DNS at the host, set `SLIMLYTICS_DOMAIN` and `ACME_EMAIL` in `.env`, then run:
 

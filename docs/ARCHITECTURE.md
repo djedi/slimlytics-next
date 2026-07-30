@@ -28,4 +28,4 @@ The JavaScript route targets a SvelteKit bootstrap endpoint. Its complete tracke
 
 ## Monorepo for the application
 
-Backend, dashboard, tracker, migrations, deployment, and technical documentation share one application repository because they evolve under one API contract and release. A possible future public marketing website belongs in a separate repository and deployment lifecycle.
+Backend, dashboard, tracker, migrations, deployment, and technical documentation share one application repository because they evolve under one API contract and release. A first public marketing surface (landing, pricing, privacy, docs hub) ships in the SvelteKit frontend for signup conversion; a dedicated marketing site can still be extracted later if the lifecycle diverges.
