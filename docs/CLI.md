@@ -7,7 +7,7 @@ The `slimlytics` CLI authenticates to a Slimlytics account, manages personal API
 Requirements: `cargo`, `curl`, and `tar`. The installer downloads this repository and performs a locked Cargo build:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.1.0/scripts/install-cli.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.1.1/scripts/install-cli.sh | sh
 slimlytics --version
 ```
 

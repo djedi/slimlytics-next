@@ -2,7 +2,7 @@
 set -eu
 
 REPOSITORY="https://github.com/djedi/slimlytics-next"
-REF="${SLIMLYTICS_CLI_REF:-cli-v0.1.0}"
+REF="${SLIMLYTICS_CLI_REF:-cli-v0.1.1}"
 
 for command in cargo curl tar mktemp; do
   if ! command -v "$command" >/dev/null 2>&1; then

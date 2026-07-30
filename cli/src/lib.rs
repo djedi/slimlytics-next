@@ -132,6 +132,7 @@ impl ApiClient {
         Ok(Self {
             http: reqwest::Client::builder()
                 .user_agent(concat!("slimlytics-cli/", env!("CARGO_PKG_VERSION")))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()?,
             base_url,
             token,
