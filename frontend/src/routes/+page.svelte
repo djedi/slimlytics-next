@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { env } from '$env/dynamic/public';
-  import { Activity, BarChart3, Bell, CalendarDays, ChevronDown, CircleDot, Download, Eye, FileText, Gauge, Goal as GoalIcon, Globe2, LayoutDashboard, LogOut, Menu, Monitor, Moon, Pause, Play, Plus, Search, Settings, Smartphone, Sun, Users, X, Zap } from '@lucide/svelte';
+  import { Activity, BarChart3, Bell, CalendarDays, ChevronDown, CircleDot, Download, Eye, EyeOff, FileText, Gauge, Goal as GoalIcon, Globe2, LayoutDashboard, LogOut, Menu, Monitor, Moon, Pause, Play, Plus, Search, Settings, Smartphone, Sun, Users, X, Zap } from '@lucide/svelte';
   import { ApiClient, demoSites, demoReport, type AntiAdblockSettings, type Goal, type LiveEvent, type Overview, type ReportRow, type Site, type Visitor } from '$lib/api';
   import { applyTheme, duration, sparklinePoints, type Theme } from '$lib/ui';
   import AntiAdblockSettingsPanel from '$lib/components/AntiAdblockSettings.svelte';
@@ -20,7 +20,7 @@
   ];
   let authenticated = $state(false);
   let authMode = $state<'login' | 'register'>('login');
-  let email = $state(''); let password = $state(''); let name = $state('');
+  let email = $state(''); let password = $state(''); let name = $state(''); let passwordVisible = $state(false);
   let authError = $state(''); let authBusy = $state(false);
   let sites = $state<Site[]>([]); let site = $state<Site | null>(null); let view = $state<View>('rollup');
   let days = $state(28); let loading = $state(false); let error = $state(''); let menuOpen = $state(false);
@@ -120,17 +120,25 @@
 {#if !authenticated}
   <main id="main" class="auth-shell">
     <section class="auth-pitch"><a class="brand" href="/" aria-label="Slimlytics home"><span class="brand-mark"><BarChart3 size={21}/></span>Slimlytics</a><div><p class="eyebrow">Privacy-first web analytics</p><h1>Know what works.<br><em>Skip the noise.</em></h1><p>Focused traffic intelligence, live visitor activity, and goals — without invasive profiles or an overgrown interface.</p><ul><li><CircleDot size={15}/> Cookieless by default</li><li><CircleDot size={15}/> Self-hosted and fast</li><li><CircleDot size={15}/> Every metric in one glance</li></ul></div><footer>Independent analytics for independent teams.</footer></section>
-    <section class="auth-card" aria-labelledby="auth-title"><div class="mobile-brand"><BarChart3/> Slimlytics</div><p class="eyebrow">{authMode === 'login' ? 'Welcome back' : 'Start measuring'}</p><h2 id="auth-title">{authMode === 'login' ? 'Sign in to your workspace' : 'Create your account'}</h2><p class="muted">{authMode === 'login' ? 'Your sites are waiting.' : 'No card. No tracking cookies.'}</p>
-      <form onsubmit={(event) => { event.preventDefault(); void authenticate(); }}>
-        {#if authMode === 'register'}<label>Full name<input bind:value={name} autocomplete="name" required /></label>{/if}
-        <label>Email address<input type="email" bind:value={email} autocomplete="email" placeholder="you@company.com" required /></label>
-        <label>Password<input type="password" bind:value={password} autocomplete={authMode === 'login' ? 'current-password' : 'new-password'} minlength="12" required /></label>
-        {#if authError}<div class="alert" role="alert">{authError}</div>{/if}
-        <button class="primary wide" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
-      </form>
-      <p class="auth-switch">{authMode === 'login' ? 'New to Slimlytics?' : 'Already have an account?'} <button onclick={() => authMode = authMode === 'login' ? 'register' : 'login'}>{authMode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
-      <p class="auth-switch"><a href="/docs/cli">CLI documentation</a> · <a href="/api/docs">API reference</a></p>
-      {#if demo}<div class="divider"><span>or</span></div><button class="secondary wide" onclick={exploreDemo}>Explore the demo dashboard</button>{/if}
+    <section class="mobile-intro" aria-labelledby="mobile-intro-title">
+      <a class="brand" href="/" aria-label="Slimlytics home"><span class="brand-mark"><BarChart3 size={20}/></span>Slimlytics</a>
+      <div><p class="eyebrow">Privacy-first web analytics</p><h1 id="mobile-intro-title">Private analytics without the clutter.</h1><p>Clear traffic insights. No invasive profiles.</p></div>
+      <ul aria-label="Slimlytics benefits"><li><CircleDot size={13}/> Cookieless by default</li><li><Zap size={13}/> Live, focused insights</li></ul>
+    </section>
+    <section class="auth-card" aria-labelledby="auth-title">
+      <div class="auth-card-inner">
+        <p class="eyebrow">{authMode === 'login' ? 'Welcome back' : 'Start measuring'}</p><h2 id="auth-title">{authMode === 'login' ? 'Sign in to your workspace' : 'Create your account'}</h2><p class="muted">{authMode === 'login' ? 'Your sites are waiting.' : 'No card. No tracking cookies.'}</p>
+        <form onsubmit={(event) => { event.preventDefault(); void authenticate(); }}>
+          {#if authMode === 'register'}<label>Full name<input bind:value={name} autocomplete="name" required /></label>{/if}
+          <label>Email address<input type="email" bind:value={email} autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email" placeholder="you@company.com" required /></label>
+          <div class="form-field"><label for="auth-password">Password</label><span class="password-field"><input id="auth-password" type={passwordVisible ? 'text' : 'password'} bind:value={password} autocomplete={authMode === 'login' ? 'current-password' : 'new-password'} minlength="12" required /><button class="password-toggle" type="button" aria-label={passwordVisible ? 'Hide password' : 'Show password'} aria-pressed={passwordVisible} onclick={() => passwordVisible = !passwordVisible}>{#if passwordVisible}<EyeOff size={18}/>{:else}<Eye size={18}/>{/if}</button></span></div>
+          {#if authError}<div class="alert" role="alert">{authError}</div>{/if}
+          <button class="primary wide" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>
+        </form>
+        <p class="auth-switch">{authMode === 'login' ? 'New to Slimlytics?' : 'Already have an account?'} <button type="button" onclick={() => { authMode = authMode === 'login' ? 'register' : 'login'; passwordVisible = false; }}>{authMode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
+        {#if demo}<div class="divider"><span>or</span></div><button class="secondary wide" onclick={exploreDemo}>Explore the demo dashboard</button>{/if}
+        <nav class="auth-links" aria-label="Product documentation"><a href="/docs/cli">CLI documentation</a><span aria-hidden="true">·</span><a href="/docs/api">API reference</a></nav>
+      </div>
     </section>
   </main>
 {:else}
