@@ -74,3 +74,17 @@ async fn anti_adblock_configuration_requires_authentication() {
         .unwrap();
     assert_eq!(response.status(), 401);
 }
+
+#[tokio::test]
+async fn api_token_management_requires_a_session() {
+    let response = app(state())
+        .oneshot(
+            Request::post("/api/account/tokens")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"name":"agent"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 401);
+}

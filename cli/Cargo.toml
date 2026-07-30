@@ -1,0 +1,31 @@
+[package]
+name = "slimlytics-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line client for managing Slimlytics accounts and tracking"
+license = "MIT"
+repository = "https://github.com/djedi/slimlytics-next"
+rust-version = "1.85"
+
+[lib]
+name = "slimlytics_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slimlytics"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive", "env"] }
+dirs = "6"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rpassword = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+url = "2"
+uuid = { version = "1", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3"

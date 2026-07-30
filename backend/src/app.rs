@@ -1,5 +1,8 @@
 use crate::{
-    auth::{hash_password, issue_token, verify_password, verify_token},
+    auth::{
+        generate_api_token, hash_api_token, hash_password, issue_token, verify_password,
+        verify_token,
+    },
     error::ApiError,
     identity::derive_ids,
     models::*,
@@ -102,6 +105,35 @@ impl FromRequestParts<AppState> for CurrentUser {
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.strip_prefix("Bearer "))
             .ok_or(ApiError::Unauthorized)?;
+        if value.starts_with("slyt_") {
+            let user: Option<Uuid> = sqlx::query_scalar(
+                "UPDATE api_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING user_id",
+            )
+            .bind(hash_api_token(value))
+            .fetch_optional(&state.pool)
+            .await?;
+            return user.map(Self).ok_or(ApiError::Unauthorized);
+        }
+        verify_token(value, &state.jwt_secret)
+            .map(|claims| Self(claims.sub))
+            .map_err(|_| ApiError::Unauthorized)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SessionUser(Uuid);
+impl FromRequestParts<AppState> for SessionUser {
+    type Rejection = ApiError;
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let value = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .ok_or(ApiError::Unauthorized)?;
         verify_token(value, &state.jwt_secret)
             .map(|claims| Self(claims.sub))
             .map_err(|_| ApiError::Unauthorized)
@@ -115,7 +147,17 @@ pub fn app(state: AppState) -> Router {
         .route("/api/auth/register", post(register))
         .route("/api/auth/login", post(login))
         .route("/api/auth/me", get(me))
+        .route(
+            "/api/account/tokens",
+            get(list_api_tokens).post(create_api_token),
+        )
+        .route(
+            "/api/account/tokens/current",
+            delete(revoke_current_api_token),
+        )
+        .route("/api/account/tokens/{token_id}", delete(revoke_api_token))
         .route("/api/sites", get(list_sites).post(create_site))
+        .route("/api/sites/ensure", post(ensure_site))
         .route(
             "/api/sites/{site_id}",
             get(get_site).put(update_site).delete(delete_site),
@@ -211,6 +253,106 @@ async fn me(
         json!({"id": row.0, "email": row.1, "createdAt": row.2}),
     ))
 }
+
+async fn create_api_token(
+    State(state): State<AppState>,
+    SessionUser(user): SessionUser,
+    Json(input): Json<ApiTokenInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    let name = input.name.trim();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(ApiError::BadRequest(
+            "token name must contain between 1 and 100 characters".into(),
+        ));
+    }
+    let days = input.expires_in_days.unwrap_or(365);
+    if !(1..=3650).contains(&days) {
+        return Err(ApiError::BadRequest(
+            "expiresInDays must be between 1 and 3650".into(),
+        ));
+    }
+    let token = generate_api_token();
+    let token_prefix: String = token.chars().take(12).collect();
+    let expires_at = Utc::now() + ChronoDuration::days(days);
+    let row: (Uuid, DateTime<Utc>) = sqlx::query_as(
+        "INSERT INTO api_tokens(user_id,name,token_hash,token_prefix,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",
+    )
+    .bind(user)
+    .bind(name)
+    .bind(hash_api_token(&token))
+    .bind(&token_prefix)
+    .bind(expires_at)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(ApiTokenCreated {
+            id: row.0,
+            name: name.to_owned(),
+            token_prefix,
+            token,
+            expires_at,
+            created_at: row.1,
+        }),
+    ))
+}
+
+async fn list_api_tokens(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Vec<ApiTokenSummary>>, ApiError> {
+    let tokens = sqlx::query_as(
+        "SELECT id,name,token_prefix,last_used_at,expires_at,created_at FROM api_tokens WHERE user_id=$1 AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC",
+    )
+    .bind(user)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(Json(tokens))
+}
+
+async fn revoke_api_token(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(token): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let result = sqlx::query(
+        "UPDATE api_tokens SET revoked_at=now() WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL",
+    )
+    .bind(token)
+    .bind(user)
+    .execute(&state.pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn revoke_current_api_token(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .filter(|value| value.starts_with("slyt_"))
+        .ok_or(ApiError::Unauthorized)?;
+    let result = sqlx::query(
+        "UPDATE api_tokens SET revoked_at=now() WHERE user_id=$1 AND token_hash=$2 AND revoked_at IS NULL",
+    )
+    .bind(user)
+    .bind(hash_api_token(token))
+    .execute(&state.pool)
+    .await?;
+    if result.rows_affected() == 1 {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::Unauthorized)
+    }
+}
+
 fn validate_credentials(value: &Credentials) -> Result<(), ApiError> {
     if !value.email.contains('@') || value.password.len() < 12 {
         return Err(ApiError::BadRequest(
@@ -250,11 +392,20 @@ async fn list_sites(
 async fn create_site(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
-    Json(input): Json<SiteInput>,
+    Json(mut input): Json<SiteInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     validate_site(&input)?;
+    input.domain = canonical_domain(&input.domain)?;
     let mut tx = state.pool.begin().await?;
-    let site: Site=sqlx::query_as("INSERT INTO sites(name,domain,timezone,allowed_origins,retention_days) VALUES($1,$2,$3,$4,$5) RETURNING id,name,domain,timezone,allowed_origins,retention_days,write_key,anti_adblock_server,anti_adblock_js_path,anti_adblock_beacon_path,created_at").bind(input.name).bind(input.domain).bind(input.timezone).bind(input.allowed_origins).bind(input.retention_days).fetch_one(&mut *tx).await?;
+    let site: Site = sqlx::query_as("INSERT INTO sites(name,domain,timezone,allowed_origins,retention_days) VALUES($1,$2,$3,$4,$5) RETURNING id,name,domain,timezone,allowed_origins,retention_days,write_key,anti_adblock_server,anti_adblock_js_path,anti_adblock_beacon_path,created_at")
+        .bind(input.name)
+        .bind(input.domain)
+        .bind(input.timezone)
+        .bind(input.allowed_origins)
+        .bind(input.retention_days)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_conflict)?;
     sqlx::query("INSERT INTO site_memberships(site_id,user_id,role) VALUES($1,$2,'owner')")
         .bind(site.id)
         .bind(user)
@@ -263,6 +414,52 @@ async fn create_site(
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(site)))
 }
+
+async fn ensure_site(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(mut input): Json<SiteInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    validate_site(&input)?;
+    input.domain = canonical_domain(&input.domain)?;
+    let mut tx = state.pool.begin().await?;
+    let inserted: Option<Site> = sqlx::query_as(
+        "INSERT INTO sites(name,domain,timezone,allowed_origins,retention_days) VALUES($1,$2,$3,$4,$5) ON CONFLICT (lower(domain)) DO NOTHING RETURNING id,name,domain,timezone,allowed_origins,retention_days,write_key,anti_adblock_server,anti_adblock_js_path,anti_adblock_beacon_path,created_at",
+    )
+    .bind(&input.name)
+    .bind(&input.domain)
+    .bind(&input.timezone)
+    .bind(&input.allowed_origins)
+    .bind(input.retention_days)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (created, site) = if let Some(site) = inserted {
+        sqlx::query("INSERT INTO site_memberships(site_id,user_id,role) VALUES($1,$2,'owner')")
+            .bind(site.id)
+            .bind(user)
+            .execute(&mut *tx)
+            .await?;
+        (true, site)
+    } else {
+        let site = sqlx::query_as(
+            "SELECT s.id,s.name,s.domain,s.timezone,s.allowed_origins,s.retention_days,s.write_key,s.anti_adblock_server,s.anti_adblock_js_path,s.anti_adblock_beacon_path,s.created_at FROM sites s JOIN site_memberships m ON m.site_id=s.id WHERE m.user_id=$1 AND lower(s.domain)=lower($2)",
+        )
+        .bind(user)
+        .bind(&input.domain)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| ApiError::BadRequest("domain is already managed by another account".into()))?;
+        (false, site)
+    };
+    tx.commit().await?;
+    let status = if created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(EnsureSiteResponse { created, site })))
+}
+
 fn validate_site(input: &SiteInput) -> Result<(), ApiError> {
     if input.name.trim().is_empty()
         || input.domain.trim().is_empty()
@@ -270,6 +467,7 @@ fn validate_site(input: &SiteInput) -> Result<(), ApiError> {
     {
         return Err(ApiError::BadRequest("invalid site".into()));
     }
+    canonical_domain(&input.domain)?;
     for origin in &input.allowed_origins {
         let parsed =
             Url::parse(origin).map_err(|_| ApiError::BadRequest("invalid origin".into()))?;
@@ -281,6 +479,22 @@ fn validate_site(input: &SiteInput) -> Result<(), ApiError> {
     }
     Ok(())
 }
+
+fn canonical_domain(value: &str) -> Result<String, ApiError> {
+    let value = value.trim().trim_end_matches('.');
+    if value.contains("://") || value.chars().any(char::is_whitespace) {
+        return Err(ApiError::BadRequest("invalid domain".into()));
+    }
+    let parsed = Url::parse(&format!("https://{value}"))
+        .map_err(|_| ApiError::BadRequest("invalid domain".into()))?;
+    let host = parsed
+        .host_str()
+        .filter(|_| parsed.port().is_none() && parsed.path() == "/")
+        .filter(|host| host.contains('.') || *host == "localhost")
+        .ok_or_else(|| ApiError::BadRequest("invalid domain".into()))?;
+    Ok(host.to_ascii_lowercase())
+}
+
 async fn get_site(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -296,11 +510,21 @@ async fn update_site(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
     Path(site): Path<Uuid>,
-    Json(i): Json<SiteInput>,
+    Json(mut i): Json<SiteInput>,
 ) -> Result<Json<Site>, ApiError> {
     require_site(&state.pool, user, site, true).await?;
     validate_site(&i)?;
-    sqlx::query("UPDATE sites SET name=$2,domain=$3,timezone=$4,allowed_origins=$5,retention_days=$6,updated_at=now() WHERE id=$1").bind(site).bind(i.name).bind(i.domain).bind(i.timezone).bind(i.allowed_origins).bind(i.retention_days).execute(&state.pool).await?;
+    i.domain = canonical_domain(&i.domain)?;
+    sqlx::query("UPDATE sites SET name=$2,domain=$3,timezone=$4,allowed_origins=$5,retention_days=$6,updated_at=now() WHERE id=$1")
+        .bind(site)
+        .bind(i.name)
+        .bind(i.domain)
+        .bind(i.timezone)
+        .bind(i.allowed_origins)
+        .bind(i.retention_days)
+        .execute(&state.pool)
+        .await
+        .map_err(map_conflict)?;
     Ok(Json(fetch_site(&state.pool, site).await?))
 }
 

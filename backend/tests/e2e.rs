@@ -33,10 +33,97 @@ async fn auth_site_goal_and_collection_flow() {
         .await
         .unwrap();
     assert_eq!(register.status(), StatusCode::CREATED);
-    let token = body_json(register.into_body()).await["token"]
+    let session_token = body_json(register.into_body()).await["token"]
         .as_str()
         .unwrap()
         .to_owned();
+
+    let created_token = router
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/account/tokens",
+            Some(&session_token),
+            json!({"name":"e2e agent","expiresInDays":30}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created_token.status(), StatusCode::CREATED);
+    let created_token = body_json(created_token.into_body()).await;
+    let token_id = created_token["id"].as_str().unwrap();
+    let token = created_token["token"].as_str().unwrap().to_owned();
+    assert!(token.starts_with("slyt_"));
+    assert!(created_token["tokenPrefix"].as_str().unwrap().len() >= 9);
+    let stored_hash: Vec<u8> = sqlx::query_scalar("SELECT token_hash FROM api_tokens WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(token_id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored_hash.len(), 32);
+    assert_ne!(stored_hash, token.as_bytes());
+
+    let token_cannot_mint_tokens = router
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/account/tokens",
+            Some(&token),
+            json!({"name":"forbidden child token"}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(token_cannot_mint_tokens.status(), StatusCode::UNAUTHORIZED);
+
+    let expired_token = router
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/account/tokens",
+            Some(&session_token),
+            json!({"name":"expiry test","expiresInDays":1}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(expired_token.status(), StatusCode::CREATED);
+    let expired_token = body_json(expired_token.into_body()).await;
+    sqlx::query("UPDATE api_tokens SET expires_at=now()-interval '1 second' WHERE id=$1")
+        .bind(uuid::Uuid::parse_str(expired_token["id"].as_str().unwrap()).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let expired_rejected = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            "/api/auth/me",
+            Some(expired_token["token"].as_str().unwrap()),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(expired_rejected.status(), StatusCode::UNAUTHORIZED);
+
+    let me = router
+        .clone()
+        .oneshot(json_request("GET", "/api/auth/me", Some(&token), json!({})))
+        .await
+        .unwrap();
+    assert_eq!(me.status(), StatusCode::OK);
+
+    let listed_tokens = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            "/api/account/tokens",
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listed_tokens.status(), StatusCode::OK);
+    let listed_tokens = body_json(listed_tokens.into_body()).await;
+    assert_eq!(listed_tokens.as_array().unwrap().len(), 1);
+    assert!(listed_tokens[0].get("token").is_none());
 
     let created = router.clone().oneshot(json_request("POST", "/api/sites", Some(&token), json!({"name":"Example","domain":"example.com","timezone":"UTC","allowed_origins":["https://example.com"],"retention_days":30}))).await.unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
@@ -51,6 +138,13 @@ async fn auth_site_goal_and_collection_flow() {
     assert!(site["antiAdblockBeaconPath"]
         .as_str()
         .is_some_and(|path| path.starts_with('/') && path.len() == 13));
+
+    let ensured = router.clone().oneshot(json_request("POST", "/api/sites/ensure", Some(&token), json!({"name":"Ignored on reuse","domain":"EXAMPLE.COM.","timezone":"America/Denver","allowedOrigins":["https://example.com"],"retentionDays":90}))).await.unwrap();
+    assert_eq!(ensured.status(), StatusCode::OK);
+    let ensured = body_json(ensured.into_body()).await;
+    assert_eq!(ensured["created"], false);
+    assert_eq!(ensured["site"]["id"], site_id);
+    assert_eq!(ensured["site"]["name"], "Example");
 
     let updated = router
         .clone()
@@ -223,6 +317,24 @@ async fn auth_site_goal_and_collection_flow() {
         .await
         .unwrap();
     assert_eq!(dependent_rows, 0, "dependent rows must cascade on prune");
+
+    let revoked = router
+        .clone()
+        .oneshot(json_request(
+            "DELETE",
+            "/api/account/tokens/current",
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(revoked.status(), StatusCode::NO_CONTENT);
+    let rejected = router
+        .clone()
+        .oneshot(json_request("GET", "/api/auth/me", Some(&token), json!({})))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
 }
 
 fn json_request(method: &str, uri: &str, token: Option<&str>, body: Value) -> Request<Body> {

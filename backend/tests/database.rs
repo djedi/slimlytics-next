@@ -11,7 +11,7 @@ async fn migrations_create_core_schema() {
         .unwrap();
     sqlx::migrate!("../migrations").run(&pool).await.unwrap();
     let tables: i64 = sqlx::query_scalar("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1)")
-        .bind(vec!["users", "sites", "events", "goals", "goal_completions", "stream_events"])
+        .bind(vec!["users", "sites", "events", "goals", "goal_completions", "stream_events", "api_tokens"])
         .fetch_one(&pool).await.unwrap();
-    assert_eq!(tables, 6);
+    assert_eq!(tables, 7);
 }

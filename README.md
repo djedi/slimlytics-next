@@ -32,6 +32,7 @@ Dashboard ◀── JSON + SSE ─────┘
 - `backend/` — Axum, Tokio, SQLx, PostgreSQL
 - `frontend/` — Svelte 5, SvelteKit, TypeScript
 - `tracker/` — framework-independent TypeScript tracker
+- `cli/` — installable Rust CLI for account, site, and tracking setup automation
 - `migrations/` — PostgreSQL schema
 - `docker/` — production container definitions and reverse proxy
 - `scripts/` — verified backup and guarded restore tooling
@@ -102,6 +103,25 @@ The generated JavaScript path returns the complete tracker initialized for that 
 
 The tracker never captures form values. Cookieless tracking, Do Not Track, and Global Privacy Control behavior are documented in `docs/PRIVACY.md`.
 
+## Rust CLI and AI agents
+
+Install the `slimlytics` binary with Rust's Cargo:
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/slimlytics-next/cli-v0.1.0/scripts/install-cli.sh | sh
+slimlytics auth login --email you@example.com
+```
+
+Login exchanges the short-lived password session for an expiring, revocable personal API token. The credential file is stored in the operating system's private configuration directory with `0600` permissions; automation can instead provide `SLIMLYTICS_TOKEN` without writing a file.
+
+The idempotent command intended for AI agents creates or reuses a domain and returns the complete server configuration, same-origin snippet, and test URLs:
+
+```bash
+slimlytics --json site ensure example.com --server caddy
+```
+
+See `docs/CLI.md` for Nginx/Apache examples, token revocation, noninteractive authentication, and the agent contract.
+
 ## Operations
 
 ```bash
@@ -141,6 +161,7 @@ See `SECURITY.md` for reporting and deployment guidance.
 - `docs/PRIVACY.md`
 - `docs/PERFORMANCE.md`
 - `docs/FIRST_PARTY_PROXY.md`
+- `docs/CLI.md`
 - `docs/MIGRATION.md`
 - `docs/OPERATIONS.md`
 

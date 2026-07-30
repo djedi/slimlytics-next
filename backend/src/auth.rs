@@ -2,9 +2,12 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use rand::{rngs::OsRng as TokenRng, RngCore};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -58,4 +61,14 @@ pub fn verify_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
         &Validation::default(),
     )?
     .claims)
+}
+
+pub fn generate_api_token() -> String {
+    let mut bytes = [0_u8; 32];
+    TokenRng.fill_bytes(&mut bytes);
+    format!("slyt_{}", URL_SAFE_NO_PAD.encode(bytes))
+}
+
+pub fn hash_api_token(token: &str) -> Vec<u8> {
+    Sha256::digest(token.as_bytes()).to_vec()
 }

@@ -18,6 +18,14 @@ pub struct Site {
     pub anti_adblock_beacon_path: String,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnsureSiteResponse {
+    pub created: bool,
+    pub site: Site,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SiteInput {
@@ -95,6 +103,35 @@ pub struct Credentials {
 #[derive(Debug, Serialize)]
 pub struct TokenResponse {
     pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiTokenInput {
+    pub name: String,
+    pub expires_in_days: Option<i64>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiTokenSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub token_prefix: String,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiTokenCreated {
+    pub id: Uuid,
+    pub name: String,
+    pub token_prefix: String,
+    pub token: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,6 +1,6 @@
 # API overview
 
-All JSON endpoints use camelCase fields. Authenticated requests send an `Authorization: Bearer ACCESS_TOKEN` header. Error responses use a stable machine-readable code and a human-readable message.
+All JSON endpoints use camelCase fields. Authenticated requests send an `Authorization: Bearer <token>` header. Error responses use a stable machine-readable code and a human-readable message.
 
 ## System
 
@@ -15,16 +15,28 @@ All JSON endpoints use camelCase fields. Authenticated requests send an `Authori
 
 Passwords are hashed with Argon2. Access tokens are short-lived JWTs signed with `JWT_SECRET`.
 
+## Account API tokens
+
+- `POST /api/account/tokens` — create a personal API token using a session JWT
+- `GET /api/account/tokens` — list active token metadata
+- `DELETE /api/account/tokens/{tokenId}` — immediately revoke a token
+- `DELETE /api/account/tokens/current` — revoke the personal token authenticating this request
+
+Creation accepts `{ "name": "slimlytics-cli", "expiresInDays": 365 }`. The response contains the `slyt_...` secret exactly once. Slimlytics stores only a SHA-256 digest of the 256-bit random secret, and list responses expose only a short prefix and timestamps. Tokens expire after 365 days by default; accepted bounds are 1–3650 days. A personal token can use account and site APIs but cannot mint another token—creating one requires a password-authenticated session JWT.
+
+API tokens and JWTs use the same Bearer header. Revoked or expired tokens return `401`. See `CLI.md` for the supported client and agent workflow.
+
 ## Sites
 
 - `GET /api/sites`
 - `POST /api/sites`
+- `POST /api/sites/ensure` — atomically create or reuse a canonical domain
 - `GET /api/sites/{siteId}`
 - `PUT /api/sites/{siteId}`
 - `PUT /api/sites/{siteId}/anti-adblock`
 - `DELETE /api/sites/{siteId}`
 
-A site has a display name, canonical URL, timezone, allowed origins, retention policy, status, independently rotatable collection write key, and a persisted anti-adblock server type, JavaScript path, and beacon path. New sites receive random neutral path defaults. The anti-adblock update body is `{ "serverType": "caddy|nginx|apache", "jsPath": "/...js", "beaconPath": "/..." }`.
+A site has a display name, canonical URL, timezone, allowed origins, retention policy, status, independently rotatable collection write key, and a persisted anti-adblock server type, JavaScript path, and beacon path. New sites receive random neutral path defaults. Domains are canonicalized case-insensitively and globally unique; an account cannot claim a domain already managed by another account. `ensure` returns `{ "created": boolean, "site": {...} }` and is safe for retrying agents. The anti-adblock update body is `{ "serverType": "caddy|nginx|apache", "jsPath": "/...js", "beaconPath": "/..." }`.
 
 ## Collection
 

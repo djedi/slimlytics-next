@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-.PHONY: help setup env tracker test test-backend test-frontend test-tracker check build up down logs clean
+.PHONY: help setup env tracker test test-backend test-cli test-frontend test-tracker check build up down logs clean
 
 help:
 	@printf '%s\n' \
@@ -9,7 +9,7 @@ help:
 	  'make env            Generate .env with secure random secrets' \
 	  'make test           Run every automated test' \
 	  'make check          Format/lint/type-check all code' \
-	  'make build          Build backend, tracker, and frontend' \
+	  'make build          Build backend, CLI, tracker, and frontend' \
 	  'make up             Start the production-like Docker stack' \
 	  'make down           Stop the Docker stack' \
 	  'make logs           Follow Docker logs'
@@ -28,10 +28,13 @@ tracker:
 	mkdir -p frontend/src/lib/server/generated
 	cp tracker/dist/slimlytics.js frontend/src/lib/server/generated/tracker.iife.txt
 
-test: test-backend test-tracker test-frontend
+test: test-backend test-cli test-tracker test-frontend
 
 test-backend:
 	cargo test --manifest-path backend/Cargo.toml --all-targets
+
+test-cli:
+	cargo test --manifest-path cli/Cargo.toml --all-targets
 
 test-tracker:
 	npm --prefix tracker test -- --run
@@ -42,11 +45,15 @@ test-frontend:
 check:
 	cargo fmt --manifest-path backend/Cargo.toml --all -- --check
 	cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings
+	cargo fmt --manifest-path cli/Cargo.toml --all -- --check
+	cargo clippy --manifest-path cli/Cargo.toml --all-targets -- -D warnings
+	sh -n scripts/install-cli.sh
 	npm --prefix tracker run check
 	npm --prefix frontend run check
 
 build: tracker
 	cargo build --manifest-path backend/Cargo.toml --release --locked
+	cargo build --manifest-path cli/Cargo.toml --release --locked
 	npm --prefix frontend run build
 
 up:
@@ -61,4 +68,5 @@ logs:
 
 clean:
 	cargo clean --manifest-path backend/Cargo.toml
+	cargo clean --manifest-path cli/Cargo.toml
 	rm -rf frontend/.svelte-kit frontend/build tracker/dist frontend/static/tracker.js frontend/static/s.js
