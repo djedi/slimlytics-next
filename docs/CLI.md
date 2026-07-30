@@ -11,7 +11,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/djedi/sl
 slimlytics --version
 ```
 
-Cargo installs the binary under `${CARGO_HOME:-$HOME/.cargo}/bin`. The installer defaults to the pinned `cli-v0.2.0` release tag; set `SLIMLYTICS_CLI_REF` to intentionally install another source ref. The canonical command remains `slimlytics`: the shorter `slim` command is already owned by the popular 23,000-star SlimToolkit project and would create a real installation collision.
+Cargo installs the binary under `${CARGO_HOME:-$HOME/.cargo}/bin`. The installer defaults to the pinned `cli-v0.2.0` release tag; set `SLIMLYTICS_CLI_REF` to intentionally install another release tag. The canonical command remains `slimlytics`: the shorter `slim` command is already owned by the popular 23,000-star SlimToolkit project and would create a real installation collision.
 
 Developers can install directly from a checkout:
 
