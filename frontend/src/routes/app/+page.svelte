@@ -83,6 +83,8 @@
   let menuOpen = $state(false);
   let overview = $state<Overview | null>(null);
   let report = $state<ReportRow[]>([]);
+  let topPages = $state<ReportRow[]>([]);
+  let topReferrers = $state<ReportRow[]>([]);
   let visitors = $state<Visitor[]>([]);
   let events = $state<LiveEvent[]>([]);
   let goals = $state<Goal[]>([]);
@@ -155,8 +157,16 @@
     error = '';
     source?.close();
     try {
-      if (view === 'overview') overview = await api.overview(site.id, days);
-      else if (['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view))
+      if (view === 'overview') {
+        const [nextOverview, pages, referrers] = await Promise.all([
+          api.overview(site.id, days),
+          api.report(site.id, 'pages', days),
+          api.report(site.id, 'referrers', days)
+        ]);
+        overview = nextOverview;
+        topPages = (demo ? demoReport('pages') : pages).slice(0, 5);
+        topReferrers = (demo ? demoReport('referrers') : referrers).slice(0, 5);
+      } else if (['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view))
         report = await api.report(site.id, view, days);
       else if (view === 'visitors') visitors = await api.visitors(site.id);
       else if (view === 'spy') {
@@ -509,10 +519,8 @@
           >
         </section>
         <div class="two-col">
-          <ReportTable title="Top pages" rows={demo ? demoReport('pages').slice(0, 5) : []} /><ReportTable
-            title="Top referrers"
-            rows={demo ? demoReport('referrers').slice(0, 5) : []}
-          />
+          <ReportTable title="Top pages" rows={topPages} />
+          <ReportTable title="Top referrers" rows={topReferrers} />
         </div>
       {:else if view === 'spy'}
         <section class="spy-toolbar">

@@ -48,6 +48,9 @@ describe('tracker', () => {
   it('tracks SPA navigation, downloads and outbound links without form values', async () => {
     const send = vi.fn().mockResolvedValue(true);
     const tracker = createTracker({ writeKey: 'wk', transport: send, autoTrack: true, batchInterval: 10_000 });
+    // Auto-track flushes the first pageview immediately.
+    await tick();
+    expect(send).toHaveBeenCalled();
     history.pushState({}, '', '/next');
     await tick();
     const download = document.createElement('a');
@@ -66,10 +69,10 @@ describe('tracker', () => {
     document.body.append(form);
     form.dispatchEvent(new Event('submit', { bubbles: true }));
     await tracker.flush();
-    const events = send.mock.calls[0][1].events;
-    expect(events.some((event: { type: string }) => event.type === 'page')).toBe(true);
-    expect(events.some((event: { name?: string }) => event.name === 'download')).toBe(true);
-    expect(events.some((event: { name?: string }) => event.name === 'outbound')).toBe(true);
+    const events = send.mock.calls.flatMap((call) => call[1].events as Array<{ type: string; name?: string }>);
+    expect(events.some((event) => event.type === 'page')).toBe(true);
+    expect(events.some((event) => event.name === 'download')).toBe(true);
+    expect(events.some((event) => event.name === 'outbound')).toBe(true);
     expect(JSON.stringify(events)).not.toContain('private');
     tracker.destroy();
   });

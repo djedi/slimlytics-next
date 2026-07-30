@@ -157,6 +157,8 @@ export function createTracker(options: TrackerOptions): Tracker {
 
   if (options.autoTrack !== false && typeof window !== 'undefined') {
     page();
+    // Send the first pageview promptly so short visits are not lost waiting on the batch timer.
+    void flush();
     const originalPush = history.pushState;
     const originalReplace = history.replaceState;
     const trackNavigation = () => queueMicrotask(() => page());
