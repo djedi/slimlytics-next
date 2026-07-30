@@ -86,7 +86,7 @@ async fn auth_site_goal_and_collection_flow() {
         .unwrap();
     assert_eq!(expired_token.status(), StatusCode::CREATED);
     let expired_token = body_json(expired_token.into_body()).await;
-    sqlx::query("UPDATE api_tokens SET expires_at=now()-interval '1 second' WHERE id=$1")
+    sqlx::query("UPDATE api_tokens SET created_at=now()-interval '2 seconds', expires_at=now()-interval '1 second' WHERE id=$1")
         .bind(uuid::Uuid::parse_str(expired_token["id"].as_str().unwrap()).unwrap())
         .execute(&pool)
         .await
