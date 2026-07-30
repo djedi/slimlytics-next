@@ -182,6 +182,7 @@
   }
   function connectSpy() {
     if (!site || paused || typeof EventSource === 'undefined' || demo) return;
+    source?.close();
     source = new EventSource(api.streamUrl(site.id, token));
     const receive = ({ data }: MessageEvent<string>) => {
       try {
@@ -193,8 +194,9 @@
     };
     source.onmessage = receive;
     source.addEventListener('event', receive as EventListener);
+    // Browsers reconnect EventSource automatically; only tear down when we mean to.
     source.onerror = () => {
-      source?.close();
+      if (paused || view !== 'spy') source?.close();
     };
   }
   function toggleSpy() {

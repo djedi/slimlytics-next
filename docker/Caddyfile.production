@@ -4,7 +4,9 @@
 }
 
 {$SLIMLYTICS_DOMAIN} {
-	encode zstd gzip
+	# Do not compress SSE — gzip/zstd buffering delays live Spy events.
+	@compress not path_regexp sse ^/api/sites/[^/]+/stream$
+	encode @compress zstd gzip
 
 	# Slimlytics first-party tracking (dogfood slimlytics.com)
 	handle /5186630f9a8b.js {
@@ -17,7 +19,11 @@
 	}
 
 	@backend path /api/* /health /ready
-	reverse_proxy @backend backend:8080
+	handle @backend {
+		reverse_proxy backend:8080 {
+			flush_interval -1
+		}
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

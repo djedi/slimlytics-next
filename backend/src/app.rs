@@ -840,11 +840,20 @@ async fn overview(
     let (a, b, p) = bounds(q.from, q.to)?;
     let c = counts(&s.pool, site, a, b).await?;
     let old = counts(&s.pool, site, p, a).await?;
+    let current_online: i64 = sqlx::query_scalar(
+        "SELECT count(DISTINCT visitor_id) FROM events \
+         WHERE site_id=$1 AND traffic_class='human' \
+         AND occurred_at > now() - interval '5 minutes'",
+    )
+    .bind(site)
+    .fetch_one(&s.pool)
+    .await?;
     Ok(Json(Overview {
         views: metric(c.0, old.0),
         visitors: metric(c.1, old.1),
         sessions: metric(c.2, old.2),
         events: metric(c.3, old.3),
+        current_online,
     }))
 }
 async fn report(
@@ -1050,9 +1059,20 @@ async fn stream(
     Query(q): Query<StreamQuery>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let token = q.token.as_deref().ok_or(ApiError::Unauthorized)?;
-    let u = verify_token(token, &s.jwt_secret)
-        .map_err(|_| ApiError::Unauthorized)?
-        .sub;
+    // EventSource cannot set Authorization; accept session JWTs or personal API tokens.
+    let u = if token.starts_with("slyt_") {
+        sqlx::query_scalar(
+            "UPDATE api_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING user_id",
+        )
+        .bind(hash_api_token(token))
+        .fetch_optional(&s.pool)
+        .await?
+        .ok_or(ApiError::Unauthorized)?
+    } else {
+        verify_token(token, &s.jwt_secret)
+            .map_err(|_| ApiError::Unauthorized)?
+            .sub
+    };
     require_site(&s.pool, u, site, false).await?;
     let last = q
         .last_event_id

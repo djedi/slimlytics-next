@@ -17,7 +17,14 @@ export class ApiError extends Error {
 type Fetcher = typeof fetch;
 interface WireSite extends Omit<Site, 'writeKey' | 'antiAdblockServer' | 'antiAdblockJsPath' | 'antiAdblockBeaconPath'> { write_key?: string; writeKey?: string; antiAdblockServer?: AntiAdblockServer; anti_adblock_server?: AntiAdblockServer; antiAdblockJsPath?: string; anti_adblock_js_path?: string; antiAdblockBeaconPath?: string; anti_adblock_beacon_path?: string }
 interface WireMetric { current: number; previous: number; change_percent?: number | null }
-interface WireOverview { views: WireMetric; visitors: WireMetric; sessions: WireMetric; events: WireMetric }
+interface WireOverview {
+  views: WireMetric;
+  visitors: WireMetric;
+  sessions: WireMetric;
+  events: WireMetric;
+  currentOnline?: number;
+  current_online?: number;
+}
 interface WireReportRow { value: string; views: number; visitors: number }
 interface WireGoal { id: string; name: string; eventName?: string; event_name?: string; pathPattern?: string; path_pattern?: string }
 function dates(days: number) {
@@ -80,9 +87,24 @@ export class ApiClient {
   async updateAntiAdblock(id: string, settings: AntiAdblockSettings) { return normalizeSite(await this.request<WireSite>(`/sites/${id}/anti-adblock`, { method: 'PUT', body: JSON.stringify(settings) }, () => ({ ...demoSites[0], id, antiAdblockServer: settings.serverType, antiAdblockJsPath: settings.jsPath, antiAdblockBeaconPath: settings.beaconPath }))); }
   deleteSite(id: string) { return this.request<void>(`/sites/${id}`, { method: 'DELETE' }, () => undefined); }
   async overview(id: string, days = 28): Promise<Overview> {
-    const wire = await this.request<WireOverview>(`/sites/${id}/overview?${dateQuery(days)}`, {}, () => ({ views: { current: baseOverview.pageViews, previous: 0 }, visitors: { current: baseOverview.visitors, previous: 0 }, sessions: { current: baseOverview.sessions, previous: 0 }, events: { current: 0, previous: 0 } }));
+    const wire = await this.request<WireOverview>(`/sites/${id}/overview?${dateQuery(days)}`, {}, () => ({
+      views: { current: baseOverview.pageViews, previous: 0 },
+      visitors: { current: baseOverview.visitors, previous: 0 },
+      sessions: { current: baseOverview.sessions, previous: 0 },
+      events: { current: 0, previous: 0 },
+      currentOnline: baseOverview.currentOnline
+    }));
     const change = wire.visitors.change_percent ?? wire.views.change_percent ?? 0;
-    return { visitors: wire.visitors.current, sessions: wire.sessions.current, pageViews: wire.views.current, bounceRate: 0, avgDuration: 0, change, currentOnline: 0, trend: [] };
+    return {
+      visitors: wire.visitors.current,
+      sessions: wire.sessions.current,
+      pageViews: wire.views.current,
+      bounceRate: 0,
+      avgDuration: 0,
+      change,
+      currentOnline: wire.currentOnline ?? wire.current_online ?? 0,
+      trend: []
+    };
   }
   async report(id: string, type: string, days = 28) { const rows = await this.request<WireReportRow[]>(`/sites/${id}/reports/${type}?${dateQuery(days)}`, {}, () => []); return rows.map((row) => ({ label: row.value, value: row.views, secondary: `${row.visitors} visitors` })); }
   visitors(id: string, days = 28) { return this.request<Visitor[]>(`/sites/${id}/visitors?${dateQuery(days)}`, {}, () => [{ id: 'v1', country: 'United States', city: 'Portland', device: 'Desktop', browser: 'Firefox', page: '/docs', sessions: 4, lastSeen: new Date().toISOString() }]); }

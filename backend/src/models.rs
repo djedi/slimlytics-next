@@ -191,11 +191,14 @@ pub struct Metric {
     pub change_percent: Option<f64>,
 }
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Overview {
     pub views: Metric,
     pub visitors: Metric,
     pub sessions: Metric,
     pub events: Metric,
+    /// Distinct human visitors with an event in the last five minutes.
+    pub current_online: i64,
 }
 
 #[derive(Debug, Deserialize)]
