@@ -4,15 +4,55 @@ import { createTracker, redactUrl, toCollectInput, trackerOptionsFromScript } fr
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('privacy', () => {
+  beforeEach(() => {
+    Object.defineProperty(navigator, 'doNotTrack', { value: '0', configurable: true });
+    Object.defineProperty(navigator, 'globalPrivacyControl', { value: false, configurable: true });
+  });
+
   it('redacts sensitive query values and preserves safe parameters', () => {
     expect(redactUrl('https://app.test/a?utm_source=email&token=secret&email=a%40b.com#x'))
       .toBe('https://app.test/a?utm_source=email&token=%5BREDACTED%5D&email=%5BREDACTED%5D');
   });
 
-  it('does not track when DNT or GPC is enabled', async () => {
+  it('does not track when DNT is enabled', async () => {
     Object.defineProperty(navigator, 'doNotTrack', { value: '1', configurable: true });
     const send = vi.fn();
     const tracker = createTracker({ writeKey: 'key', endpoint: '/api/collect', transport: send });
+    tracker.page();
+    await tracker.flush();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('sends a privacy-reduced event when GPC is enabled', async () => {
+    Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
+    const send = vi.fn().mockResolvedValue(true);
+    const tracker = createTracker({
+      writeKey: 'key',
+      endpoint: '/api/collect',
+      transport: send,
+      autoTrack: false
+    });
+    tracker.event('signup', { email: 'private@example.com', plan: 'pro' });
+    await tracker.flush();
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][1].events[0]).toMatchObject({ privacyControl: 'gpc' });
+    expect(toCollectInput(send.mock.calls[0][1].events[0])).toMatchObject({
+      name: 'signup',
+      privacyControl: 'gpc',
+      properties: {}
+    });
+  });
+
+  it('can explicitly deny collection under GPC', async () => {
+    Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
+    const send = vi.fn();
+    const tracker = createTracker({
+      writeKey: 'key',
+      transport: send,
+      autoTrack: false,
+      gpcMode: 'deny'
+    });
     tracker.page();
     await tracker.flush();
     expect(send).not.toHaveBeenCalled();
@@ -22,6 +62,7 @@ describe('privacy', () => {
 describe('tracker', () => {
   beforeEach(() => {
     Object.defineProperty(navigator, 'doNotTrack', { value: '0', configurable: true });
+    Object.defineProperty(navigator, 'globalPrivacyControl', { value: false, configurable: true });
     history.replaceState({}, '', '/start?token=nope&utm_source=test');
   });
   afterEach(() => vi.useRealTimers());
@@ -90,6 +131,7 @@ describe('tracker', () => {
       endpoint: 'https://analytics.example/api/e',
       autoTrack: false,
       respectDnt: true,
+      gpcMode: 'reduce',
       consent: 'denied'
     });
     expect(trackerOptionsFromScript(document.createElement('script'))).toBeUndefined();

@@ -4,7 +4,8 @@ use axum::{
     http::{header, Request, StatusCode},
 };
 use serde_json::{json, Value};
-use slimlytics_backend::maintenance::prune_expired_events;
+use slimlytics_backend::briefs::{build_marketing_brief, process_due_reports};
+use slimlytics_backend::maintenance::{prune_expired_events, refresh_daily_rollups};
 use slimlytics_backend::{app, AppState};
 use sqlx::postgres::PgPoolOptions;
 use tower::ServiceExt;
@@ -44,7 +45,14 @@ async fn auth_site_goal_and_collection_flow() {
             "POST",
             "/api/account/tokens",
             Some(&session_token),
-            json!({"name":"e2e agent","expiresInDays":30}),
+            json!({
+                "name":"e2e agent",
+                "expiresInDays":30,
+                "scopes":[
+                    "sites:read","sites:write","analytics:read","analytics:write",
+                    "integrations:read","integrations:write"
+                ]
+            }),
         ))
         .await
         .unwrap();
@@ -131,6 +139,13 @@ async fn auth_site_goal_and_collection_flow() {
     let site_id = site["id"].as_str().unwrap();
     let site_uuid = uuid::Uuid::parse_str(site_id).unwrap();
     let write_key = site["writeKey"].as_str().unwrap();
+    let server_write_key = site["serverWriteKey"].as_str().unwrap();
+    uuid::Uuid::parse_str(server_write_key).unwrap();
+    let user_uuid: uuid::Uuid = sqlx::query_scalar("SELECT id FROM users WHERE email=$1")
+        .bind(&email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(site["antiAdblockServer"], "caddy");
     assert!(site["antiAdblockJsPath"]
         .as_str()
@@ -236,6 +251,89 @@ async fn auth_site_goal_and_collection_flow() {
             .unwrap();
     assert_eq!(stored.0, "https://example.com/thanks");
     assert_eq!(stored.1.as_deref(), Some("newsletter"));
+
+    let mut private_collect = json_request(
+        "POST",
+        &format!("/api/e/{write_key}"),
+        None,
+        json!({
+            "name":"signup",
+            "url":"https://example.com/private",
+            "privacyControl":"gpc",
+            "trackerVersion":"1.0.0",
+            "properties":{"email":"private@example.com","plan":"pro"}
+        }),
+    );
+    private_collect
+        .headers_mut()
+        .insert(header::ORIGIN, "https://example.com".parse().unwrap());
+    private_collect
+        .headers_mut()
+        .insert(header::USER_AGENT, "Mozilla/5.0".parse().unwrap());
+    private_collect.extensions_mut().insert(ConnectInfo(
+        "203.0.113.11:443".parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let private_collected = router.clone().oneshot(private_collect).await.unwrap();
+    assert_eq!(private_collected.status(), StatusCode::ACCEPTED);
+    let private_event: (serde_json::Value, String, Option<String>) = sqlx::query_as(
+        "SELECT properties,privacy_mode,tracker_version FROM events WHERE site_id=$1 AND path='/private'",
+    )
+    .bind(site_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(private_event.0, json!({}));
+    assert_eq!(private_event.1, "gpc");
+    assert_eq!(private_event.2.as_deref(), Some("1.0.0"));
+
+    let health = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            &format!("/api/sites/{site_id}/collection-health"),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(health.status(), StatusCode::OK);
+    let health = body_json(health.into_body()).await;
+    assert_eq!(health["acceptedTotal"], 2);
+    assert_eq!(health["rejectedTotal"], 0);
+    assert_eq!(health["lastTrackerVersion"], "1.0.0");
+
+    let today = chrono::Utc::now().date_naive();
+    let overview_response = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            &format!("/api/sites/{site_id}/overview?from={today}&to={today}"),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(overview_response.status(), StatusCode::OK);
+    let overview_body = body_json(overview_response.into_body()).await;
+    assert_eq!(overview_body["views"]["current"], 0);
+    assert_eq!(overview_body["events"]["current"], 2);
+    assert!(overview_body["bounceRate"].is_number());
+    assert!(overview_body["avgDurationSeconds"].is_number());
+    assert_eq!(overview_body["trend"].as_array().unwrap().len(), 1);
+
+    let goals_response = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            &format!("/api/sites/{site_id}/goals"),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    let goals_body = body_json(goals_response.into_body()).await;
+    assert_eq!(goals_body[0]["conversions"], 1);
+    assert!(goals_body[0]["conversionRate"].is_number());
     let completions: i64 =
         sqlx::query_scalar("SELECT count(*) FROM goal_completions WHERE site_id=$1")
             .bind(site_uuid)
@@ -244,7 +342,116 @@ async fn auth_site_goal_and_collection_flow() {
             .unwrap();
     assert_eq!(completions, 1);
 
-    let today = chrono::Utc::now().date_naive();
+    let annotation_path = format!("/api/sites/{site_id}/annotations");
+    let mut first_annotation = json_request(
+        "POST",
+        &annotation_path,
+        Some(&token),
+        json!({"occurredOn":today,"label":"Campaign launched"}),
+    );
+    first_annotation
+        .headers_mut()
+        .insert("idempotency-key", "e2e-campaign-launch".parse().unwrap());
+    let first_annotation = router.clone().oneshot(first_annotation).await.unwrap();
+    assert_eq!(first_annotation.status(), StatusCode::CREATED);
+    let first_annotation = body_json(first_annotation.into_body()).await;
+    let mut repeated_annotation = json_request(
+        "POST",
+        &annotation_path,
+        Some(&token),
+        json!({"occurredOn":today,"label":"Campaign launched"}),
+    );
+    repeated_annotation
+        .headers_mut()
+        .insert("idempotency-key", "e2e-campaign-launch".parse().unwrap());
+    let repeated_annotation = router.clone().oneshot(repeated_annotation).await.unwrap();
+    assert_eq!(repeated_annotation.status(), StatusCode::CREATED);
+    assert_eq!(
+        body_json(repeated_annotation.into_body()).await["id"],
+        first_annotation["id"]
+    );
+
+    let funnel_path = format!("/api/sites/{site_id}/funnels");
+    let funnel_input = json!({
+        "name":"Signup funnel",
+        "steps":[
+            {"label":"Visit","path":"/thanks"},
+            {"label":"Signup","eventName":"signup"}
+        ]
+    });
+    let mut first_funnel = json_request("POST", &funnel_path, Some(&token), funnel_input.clone());
+    first_funnel
+        .headers_mut()
+        .insert("idempotency-key", "e2e-signup-funnel".parse().unwrap());
+    let first_funnel = router.clone().oneshot(first_funnel).await.unwrap();
+    assert_eq!(first_funnel.status(), StatusCode::CREATED);
+    let first_funnel = body_json(first_funnel.into_body()).await;
+    let mut repeated_funnel = json_request("POST", &funnel_path, Some(&token), funnel_input);
+    repeated_funnel
+        .headers_mut()
+        .insert("idempotency-key", "e2e-signup-funnel".parse().unwrap());
+    let repeated_funnel = router.clone().oneshot(repeated_funnel).await.unwrap();
+    assert_eq!(repeated_funnel.status(), StatusCode::CREATED);
+    assert_eq!(
+        body_json(repeated_funnel.into_body()).await["id"],
+        first_funnel["id"]
+    );
+    let funnel_report = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            &format!(
+                "/api/sites/{site_id}/funnels/{}/report?from={today}&to={today}",
+                first_funnel["id"].as_str().unwrap()
+            ),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(funnel_report.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(funnel_report.into_body()).await["steps"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+
+    sqlx::query("INSERT INTO search_console_integrations(site_id,refresh_token_encrypted,connected_by) VALUES($1,'encrypted',$2)")
+        .bind(site_uuid)
+        .bind(user_uuid)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO search_console_metrics(site_id,metric_date,clicks,impressions,ctr,position) VALUES($1,$2,1,2,0.5,3)")
+        .bind(site_uuid)
+        .bind(today)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let disconnected = router
+        .clone()
+        .oneshot(json_request(
+            "DELETE",
+            &format!("/api/sites/{site_id}/integrations/search-console"),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(disconnected.status(), StatusCode::NO_CONTENT);
+    let search_console_rows: i64 = sqlx::query_scalar(
+        "SELECT
+           (SELECT count(*) FROM search_console_integrations WHERE site_id=$1) +
+           (SELECT count(*) FROM search_console_metrics WHERE site_id=$1)",
+    )
+    .bind(site_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(search_console_rows, 0);
+
     for path in [
         format!("/api/sites/{site_id}/overview?from={today}&to={today}"),
         format!("/api/sites/{site_id}/visitors?from={today}&to={today}"),
@@ -298,6 +505,7 @@ async fn auth_site_goal_and_collection_flow() {
     assert_eq!(prune_expired_events(&pool, 1).await.unwrap(), 1);
     assert_eq!(prune_expired_events(&pool, 1).await.unwrap(), 1);
     assert_eq!(prune_expired_events(&pool, 1).await.unwrap(), 1);
+    assert_eq!(prune_expired_events(&pool, 1).await.unwrap(), 1);
     assert_eq!(prune_expired_events(&pool, 1).await.unwrap(), 0);
     let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM events WHERE site_id=$1")
         .bind(site_uuid)
@@ -317,6 +525,136 @@ async fn auth_site_goal_and_collection_flow() {
         .await
         .unwrap();
     assert_eq!(dependent_rows, 0, "dependent rows must cascade on prune");
+
+    let yesterday = today.pred_opt().unwrap();
+    sqlx::query("INSERT INTO events(site_id,occurred_at,visitor_id,session_id,event_name,url,path) VALUES($1,$2,'brief-visitor','brief-session','pageview','https://example.com/brief','/brief')")
+        .bind(site_uuid)
+        .bind(yesterday.and_hms_opt(12, 0, 0).unwrap().and_utc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(refresh_daily_rollups(&pool, 8).await.unwrap() >= 1);
+    let brief = build_marketing_brief(&pool, site_uuid, 1).await.unwrap();
+    assert_eq!(brief["dataThrough"], yesterday.to_string());
+    assert_eq!(brief["metrics"]["pageViews"]["value"], 1);
+    assert_eq!(brief["topPages"][0]["path"], "/brief");
+    let mcp_brief = router
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            "/api/mcp",
+            Some(&token),
+            json!({
+                "jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":"marketing_brief","arguments":{"siteId":site_id,"days":1}}
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(mcp_brief.status(), StatusCode::OK);
+    let mcp_brief = body_json(mcp_brief.into_body()).await;
+    assert_eq!(
+        mcp_brief["result"]["structuredContent"]["metrics"]["pageViews"]["value"],
+        1
+    );
+
+    let subscription = router
+        .clone()
+        .oneshot(json_request(
+            "POST",
+            &format!("/api/sites/{site_id}/report-subscriptions"),
+            Some(&token),
+            json!({
+                "name":"Weekly agent brief",
+                "webhookUrl":"https://hooks.example.com/slimlytics",
+                "frequency":"weekly",
+                "anomalyOnly":false
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(subscription.status(), StatusCode::CREATED);
+    let subscription = body_json(subscription.into_body()).await;
+    assert!(subscription["signingSecret"].as_str().unwrap().len() >= 40);
+    let subscription_id = uuid::Uuid::parse_str(subscription["id"].as_str().unwrap()).unwrap();
+    sqlx::query(
+        "UPDATE report_subscriptions SET anomaly_only=true,next_run_at=now()-interval '1 minute'
+         WHERE id=$1",
+    )
+    .bind(subscription_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        process_due_reports(&pool, b"abcdefghijklmnopqrstuvwxyz012345")
+            .await
+            .unwrap(),
+        1
+    );
+    let scheduled: (Option<String>, bool) = sqlx::query_as(
+        "SELECT last_status,next_run_at>now()+interval '6 days'
+         FROM report_subscriptions WHERE id=$1",
+    )
+    .bind(subscription_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(scheduled.0.as_deref(), Some("skipped"));
+    assert!(scheduled.1);
+
+    let server_payload = json!({"events":[{
+        "idempotencyKey":"e2e-server-request-1",
+        "url":"https://example.com/robots-target?token=private&utm_source=crawler",
+        "userAgent":"GPTBot/1.0",
+        "clientIp":"203.0.113.40",
+        "method":"GET","status":200
+    }]});
+    let mut server_request = json_request("POST", "/api/ingest", None, server_payload.clone());
+    server_request
+        .headers_mut()
+        .insert("x-slimlytics-server-key", server_write_key.parse().unwrap());
+    server_request.extensions_mut().insert(ConnectInfo(
+        "198.51.100.10:443".parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let server_response = router.clone().oneshot(server_request).await.unwrap();
+    assert_eq!(server_response.status(), StatusCode::ACCEPTED);
+    assert_eq!(body_json(server_response.into_body()).await["accepted"], 1);
+    let mut retry = json_request("POST", "/api/ingest", None, server_payload);
+    retry
+        .headers_mut()
+        .insert("x-slimlytics-server-key", server_write_key.parse().unwrap());
+    retry.extensions_mut().insert(ConnectInfo(
+        "198.51.100.10:443".parse::<std::net::SocketAddr>().unwrap(),
+    ));
+    let retry = router.clone().oneshot(retry).await.unwrap();
+    assert_eq!(body_json(retry.into_body()).await["duplicates"], 1);
+    let server_event: (String, String, String, Option<String>) = sqlx::query_as(
+        "SELECT ingestion_source,traffic_class::text,url,automation_name FROM events
+         WHERE site_id=$1 AND source_event_id='e2e-server-request-1'",
+    )
+    .bind(site_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(server_event.0, "server");
+    assert_eq!(server_event.1, "bot");
+    assert_eq!(server_event.2, "https://example.com/robots-target");
+    assert_eq!(server_event.3.as_deref(), Some("GPTBot"));
+    let crawler_report = router
+        .clone()
+        .oneshot(json_request(
+            "GET",
+            &format!("/api/sites/{site_id}/reports/ai-crawlers?from={today}&to={today}"),
+            Some(&token),
+            json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(crawler_report.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(crawler_report.into_body()).await[0]["value"],
+        "GPTBot"
+    );
 
     let revoked = router
         .clone()

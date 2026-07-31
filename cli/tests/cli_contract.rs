@@ -13,6 +13,7 @@ fn site() -> Site {
         allowed_origins: vec!["https://example.com".into()],
         retention_days: 365,
         write_key: Uuid::parse_str("d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33").unwrap(),
+        server_write_key: Uuid::parse_str("7e55bd93-2601-46fc-881a-e847209f25f1").unwrap(),
         anti_adblock_server: "caddy".into(),
         anti_adblock_js_path: "/456bbb63bb86.js".into(),
         anti_adblock_beacon_path: "/0d31360a3101".into(),
@@ -72,6 +73,7 @@ fn tracking_setup_is_complete_and_ai_friendly() {
         .contains("/api/collect/d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33"));
     assert_eq!(setup.script_test_url, "https://example.com/456bbb63bb86.js");
     assert_eq!(setup.beacon_test_url, "https://example.com/0d31360a3101");
+    assert_eq!(setup.server_ingest_url, "https://slimlytics.com/api/ingest");
 
     let mut unsafe_site = site();
     unsafe_site.anti_adblock_js_path = "/valid.js\nheader injected".into();

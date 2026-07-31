@@ -7,6 +7,7 @@ const site = {
   name: 'Example',
   domain: 'example.com',
   writeKey: 'd8f6f152-7a9e-4eb9-a8a1-468db4c0ea33',
+  serverWriteKey: '7e55bd93-2601-46fc-881a-e847209f25f1',
   antiAdblockServer: 'caddy' as const,
   antiAdblockJsPath: '/456bbb63bb86.js',
   antiAdblockBeaconPath: '/0d31360a3101'

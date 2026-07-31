@@ -19,7 +19,7 @@ fn site_ensure_reuses_domain_and_emits_agent_contract() {
         assert!(request
             .to_ascii_lowercase()
             .contains("authorization: bearer slyt_test-agent-token\r\n"));
-        let body = r#"{"created":false,"site":{"id":"df222f1c-8d95-4917-872e-98b30115aac8","name":"Example","domain":"example.com","timezone":"UTC","allowedOrigins":["https://example.com"],"retentionDays":365,"writeKey":"d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33","antiAdblockServer":"caddy","antiAdblockJsPath":"/456bbb63bb86.js","antiAdblockBeaconPath":"/0d31360a3101","createdAt":"2026-07-29T00:00:00Z"}}"#;
+        let body = r#"{"created":false,"site":{"id":"df222f1c-8d95-4917-872e-98b30115aac8","name":"Example","domain":"example.com","timezone":"UTC","allowedOrigins":["https://example.com"],"retentionDays":365,"writeKey":"d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33","serverWriteKey":"7e55bd93-2601-46fc-881a-e847209f25f1","antiAdblockServer":"caddy","antiAdblockJsPath":"/456bbb63bb86.js","antiAdblockBeaconPath":"/0d31360a3101","createdAt":"2026-07-29T00:00:00Z"}}"#;
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -62,6 +62,10 @@ fn site_ensure_reuses_domain_and_emits_agent_contract() {
         value["data"]["tracking"]["snippet"],
         r#"<script async src="/456bbb63bb86.js"></script>"#
     );
+    assert_eq!(
+        value["data"]["tracking"]["serverIngestUrl"],
+        format!("http://{address}/api/ingest")
+    );
 }
 
 #[test]
@@ -76,7 +80,7 @@ fn site_ensure_creates_missing_domain_once() {
         assert!(request.starts_with("POST /api/sites/ensure HTTP/1.1\r\n"));
         assert!(request.contains(r#""domain":"new.example.com""#));
         assert!(request.contains(r#""allowedOrigins":["https://new.example.com"]"#));
-        let body = r#"{"created":true,"site":{"id":"4ea55444-cf62-489d-a4c3-bc09da805486","name":"new.example.com","domain":"new.example.com","timezone":"UTC","allowedOrigins":["https://new.example.com"],"retentionDays":365,"writeKey":"d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33","antiAdblockServer":"caddy","antiAdblockJsPath":"/456bbb63bb86.js","antiAdblockBeaconPath":"/0d31360a3101","createdAt":"2026-07-29T00:00:00Z"}}"#;
+        let body = r#"{"created":true,"site":{"id":"4ea55444-cf62-489d-a4c3-bc09da805486","name":"new.example.com","domain":"new.example.com","timezone":"UTC","allowedOrigins":["https://new.example.com"],"retentionDays":365,"writeKey":"d8f6f152-7a9e-4eb9-a8a1-468db4c0ea33","serverWriteKey":"7e55bd93-2601-46fc-881a-e847209f25f1","antiAdblockServer":"caddy","antiAdblockJsPath":"/456bbb63bb86.js","antiAdblockBeaconPath":"/0d31360a3101","createdAt":"2026-07-29T00:00:00Z"}}"#;
         write!(
             create_stream,
             "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

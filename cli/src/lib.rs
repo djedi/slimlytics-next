@@ -27,6 +27,7 @@ pub struct Site {
     pub allowed_origins: Vec<String>,
     pub retention_days: i32,
     pub write_key: Uuid,
+    pub server_write_key: Uuid,
     pub anti_adblock_server: String,
     pub anti_adblock_js_path: String,
     pub anti_adblock_beacon_path: String,
@@ -100,6 +101,7 @@ pub struct TrackingSetup {
     pub snippet: String,
     pub script_test_url: String,
     pub beacon_test_url: String,
+    pub server_ingest_url: String,
     pub next_steps: Vec<String>,
 }
 
@@ -224,6 +226,7 @@ impl ApiClient {
         struct Input<'a> {
             name: &'a str,
             expires_in_days: i64,
+            scopes: [&'a str; 6],
         }
         self.request(
             Method::POST,
@@ -231,6 +234,14 @@ impl ApiClient {
             Some(&Input {
                 name,
                 expires_in_days,
+                scopes: [
+                    "sites:read",
+                    "sites:write",
+                    "analytics:read",
+                    "analytics:write",
+                    "integrations:read",
+                    "integrations:write",
+                ],
             }),
             Some(session_token),
         )
@@ -484,6 +495,7 @@ pub fn tracking_setup(site: &Site, analytics_origin: &str) -> Result<TrackingSet
         snippet: format!(r#"<script async src="{}"></script>"#, site.anti_adblock_js_path),
         script_test_url: format!("{website}{}", site.anti_adblock_js_path),
         beacon_test_url: format!("{website}{}", site.anti_adblock_beacon_path),
+        server_ingest_url: format!("{analytics}/api/ingest"),
         next_steps: vec![
             "Install serverConfig in the website's Caddy, Nginx, or Apache configuration and reload the server.".into(),
             "Add snippet to every page before the closing </body> tag.".into(),

@@ -15,6 +15,11 @@
       "description": "Slimlytics Cloud"
     }
   ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
   "tags": [
     {
       "name": "System",
@@ -110,6 +115,38 @@
           }
         },
         "security": []
+      }
+    },
+    "/api/mcp": {
+      "post": {
+        "tags": ["Reporting"],
+        "summary": "Call the Slimlytics MCP server",
+        "description": "Stateless Streamable HTTP MCP endpoint using JSON-RPC 2.0 and the stable 2025-11-25 protocol revision. Personal API tokens are restricted by scope and calls are audited.",
+        "operationId": "mcp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["jsonrpc", "method"],
+                "properties": {
+                  "jsonrpc": {"const": "2.0"},
+                  "id": {},
+                  "method": {"type": "string"},
+                  "params": {"type": "object"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "JSON-RPC response or MCP tool result"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
       }
     },
     "/api/auth/register": {
@@ -1465,6 +1502,95 @@
         ]
       }
     },
+    "/api/sites/{siteId}/collection-health": {
+      "get": {
+        "tags": [
+          "Tracking setup"
+        ],
+        "summary": "Get collection health",
+        "description": "Returns accepted and rejected collection counters plus the most recent tracker activity for operational and agent diagnostics.",
+        "operationId": "getCollectionHealth",
+        "responses": {
+          "200": {
+            "description": "Collection health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionHealth"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required or invalid/expired credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Credential lacks permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "siteId",
+            "in": "path",
+            "required": true,
+            "description": "Site UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
     "/api/sites/{siteId}/overview": {
       "get": {
         "tags": [
@@ -1719,6 +1845,354 @@
             }
           }
         ]
+      }
+    },
+    "/api/sites/{siteId}/insights/journeys": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "List common session journeys",
+        "operationId": "getCommonJourneys",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"},
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {"description": "Ordered page paths with session and visitor counts"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/insights/attribution": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Get first-touch campaign attribution",
+        "operationId": "getAttribution",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"},
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {"description": "Campaign visitors, conversions, and revenue"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/insights/anomalies": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Detect page-view anomalies",
+        "operationId": "getAnomalies",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"}
+        ],
+        "responses": {
+          "200": {"description": "Days at least 30 percent above or below the trailing baseline"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/annotations": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "List timeline annotations",
+        "operationId": "listAnnotations",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"}
+        ],
+        "responses": {
+          "200": {"description": "Annotations in the requested date range"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      },
+      "post": {
+        "tags": ["Reporting"],
+        "summary": "Create a timeline annotation",
+        "operationId": "createAnnotation",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["occurredOn", "label"],
+                "properties": {
+                  "occurredOn": {"type": "string", "format": "date"},
+                  "label": {"type": "string", "maxLength": 240}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Annotation created"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/annotations/{annotationId}": {
+      "delete": {
+        "tags": ["Reporting"],
+        "summary": "Delete a timeline annotation",
+        "operationId": "deleteAnnotation",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {
+            "name": "annotationId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "204": {"description": "Annotation deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/funnels": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "List conversion funnels",
+        "operationId": "listFunnels",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {
+          "200": {"description": "Configured conversion funnels"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      },
+      "post": {
+        "tags": ["Reporting"],
+        "summary": "Create a conversion funnel",
+        "operationId": "createFunnel",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "steps"],
+                "properties": {
+                  "name": {"type": "string", "maxLength": 120},
+                  "steps": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 10,
+                    "items": {
+                      "type": "object",
+                      "required": ["label"],
+                      "properties": {
+                        "label": {"type": "string"},
+                        "eventName": {"type": "string"},
+                        "path": {"type": "string"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {"description": "Funnel created"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/funnels/{funnelId}": {
+      "delete": {
+        "tags": ["Reporting"],
+        "summary": "Delete a conversion funnel",
+        "operationId": "deleteFunnel",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {
+            "name": "funnelId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "204": {"description": "Funnel deleted"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/funnels/{funnelId}/report": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Calculate a sequential funnel report",
+        "operationId": "getFunnelReport",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {
+            "name": "funnelId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          },
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"}
+        ],
+        "responses": {
+          "200": {"description": "Ordered step reach and conversion rates"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/integrations/search-console": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Get Search Console connection status",
+        "operationId": "getSearchConsoleStatus",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {
+          "200": {"description": "Configuration, connection, property, and sync status"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      },
+      "delete": {
+        "tags": ["Reporting"],
+        "summary": "Disconnect Search Console and delete cached search metrics",
+        "operationId": "disconnectSearchConsole",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {
+          "204": {"description": "Search Console disconnected"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/integrations/search-console/connect": {
+      "post": {
+        "tags": ["Reporting"],
+        "summary": "Start Search Console OAuth",
+        "operationId": "connectSearchConsole",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {
+          "200": {"description": "Google authorization URL with short-lived state"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/integrations/search-console/sync": {
+      "post": {
+        "tags": ["Reporting"],
+        "summary": "Sync dated Search Console metrics",
+        "operationId": "syncSearchConsole",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"}
+        ],
+        "responses": {
+          "200": {"description": "Sync result and cached row count"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/reports/search-console": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Report cached organic search performance",
+        "operationId": "getSearchConsoleReport",
+        "parameters": [
+          {"$ref": "#/components/parameters/SiteId"},
+          {"$ref": "#/components/parameters/FromDate"},
+          {"$ref": "#/components/parameters/ToDate"},
+          {
+            "name": "dimension",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["query", "page", "country", "device", "date"],
+              "default": "query"
+            }
+          },
+          {"$ref": "#/components/parameters/Limit"}
+        ],
+        "responses": {
+          "200": {"description": "Clicks, impressions, CTR, and weighted position"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/integrations/search-console/callback": {
+      "get": {
+        "tags": ["Reporting"],
+        "summary": "Complete Search Console OAuth",
+        "operationId": "searchConsoleCallback",
+        "parameters": [
+          {"name": "code", "in": "query", "required": true, "schema": {"type": "string"}},
+          {"name": "state", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "303": {"description": "Redirect to the dashboard after connection"},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        },
+        "security": []
       }
     },
     "/api/sites/{siteId}/visitors": {
@@ -3126,6 +3600,77 @@
         ]
       }
     },
+    "/api/sites/{siteId}/rotate-server-key": {
+      "post": {
+        "tags": ["Sites"],
+        "summary": "Rotate the server ingestion key",
+        "operationId": "rotateServerWriteKey",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {
+          "200": {"description": "New server ingestion key", "content": {"application/json": {"schema": {"type": "object", "required": ["serverWriteKey"], "properties": {"serverWriteKey": {"type": "string", "format": "uuid"}}}}}},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/ingest": {
+      "post": {
+        "tags": ["Collection"],
+        "summary": "Ingest a batch of trusted server request events",
+        "description": "Uses a separate rotatable site secret. Raw client IP values are transformed for rotating identity and optional GeoIP, then discarded. Stable per-event idempotency keys make log retries safe.",
+        "operationId": "ingestServerEvents",
+        "security": [{"serverWriteKey": []}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["events"], "properties": {"events": {"type": "array", "minItems": 1, "maxItems": 100, "items": {"type": "object", "required": ["url", "userAgent", "clientIp"], "properties": {"idempotencyKey": {"type": "string", "minLength": 8, "maxLength": 128}, "url": {"type": "string", "format": "uri"}, "userAgent": {"type": "string", "maxLength": 1024}, "clientIp": {"type": "string"}, "occurredAt": {"type": "string", "format": "date-time"}, "referrer": {"type": "string", "format": "uri"}, "method": {"type": "string", "enum": ["GET", "HEAD"]}, "status": {"type": "integer", "minimum": 100, "maximum": 599}, "eventName": {"type": "string", "default": "pageview"}}}}}}}}},
+        "responses": {
+          "202": {"description": "Batch processed", "content": {"application/json": {"schema": {"type": "object", "properties": {"accepted": {"type": "integer"}, "duplicates": {"type": "integer"}}}}}},
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "429": {"description": "Rate limited"},
+          "500": {"$ref": "#/components/responses/InternalError"}
+        }
+      }
+    },
+    "/api/sites/{siteId}/report-subscriptions": {
+      "get": {
+        "tags": ["Reporting"], "summary": "List scheduled marketing briefs", "operationId": "listReportSubscriptions",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "responses": {"200": {"description": "Subscriptions"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      },
+      "post": {
+        "tags": ["Reporting"], "summary": "Create a signed scheduled marketing brief", "operationId": "createReportSubscription",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportSubscriptionInput"}}}},
+        "responses": {"201": {"description": "Subscription and one-time signing secret"}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      }
+    },
+    "/api/sites/{siteId}/report-subscriptions/{subscriptionId}": {
+      "parameters": [{"$ref": "#/components/parameters/SiteId"}, {"$ref": "#/components/parameters/SubscriptionId"}],
+      "put": {
+        "tags": ["Reporting"], "summary": "Update a scheduled marketing brief", "operationId": "updateReportSubscription",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReportSubscriptionInput"}}}},
+        "responses": {"200": {"description": "Updated subscription"}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      },
+      "delete": {
+        "tags": ["Reporting"], "summary": "Delete a scheduled marketing brief", "operationId": "deleteReportSubscription",
+        "responses": {"204": {"description": "Subscription deleted"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      }
+    },
+    "/api/sites/{siteId}/report-subscriptions/{subscriptionId}/deliver": {
+      "post": {
+        "tags": ["Reporting"], "summary": "Deliver a marketing brief now", "operationId": "deliverReportSubscription",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}, {"$ref": "#/components/parameters/SubscriptionId"}],
+        "responses": {"200": {"description": "Delivery outcome"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      }
+    },
+    "/api/sites/{siteId}/report-subscriptions/{subscriptionId}/deliveries": {
+      "get": {
+        "tags": ["Reporting"], "summary": "List recent marketing brief deliveries", "operationId": "listReportDeliveries",
+        "parameters": [{"$ref": "#/components/parameters/SiteId"}, {"$ref": "#/components/parameters/SubscriptionId"}],
+        "responses": {"200": {"description": "Recent delivery outcomes"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "404": {"$ref": "#/components/responses/NotFound"}, "500": {"$ref": "#/components/responses/InternalError"}}
+      }
+    },
     "/api/openapi.json": {
       "get": {
         "tags": [
@@ -3251,6 +3796,72 @@
         "in": "query",
         "name": "token",
         "description": "Short-lived session JWT for native EventSource clients. Never put personal API tokens in URLs."
+      },
+      "serverWriteKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Slimlytics-Server-Key",
+        "description": "Rotatable site secret accepted only by server request ingestion."
+      }
+    },
+    "parameters": {
+      "SiteId": {
+        "name": "siteId",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"}
+      },
+      "SubscriptionId": {
+        "name": "subscriptionId",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"}
+      },
+      "FromDate": {
+        "name": "from",
+        "in": "query",
+        "required": true,
+        "schema": {"type": "string", "format": "date"}
+      },
+      "ToDate": {
+        "name": "to",
+        "in": "query",
+        "required": true,
+        "schema": {"type": "string", "format": "date"}
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {"type": "integer", "minimum": 1, "maximum": 500}
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "8-128 URL-safe characters. Replays return the original response for 24 hours.",
+        "schema": {"type": "string", "minLength": 8, "maxLength": 128}
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "Unauthorized": {
+        "description": "Authentication required",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "Forbidden": {
+        "description": "Insufficient site role",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "NotFound": {
+        "description": "Site or resource not found",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "InternalError": {
+        "description": "Internal service error",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
       }
     },
     "schemas": {
@@ -3368,6 +3979,24 @@
             "minimum": 1,
             "maximum": 3650,
             "default": 365
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "sites:read",
+                "sites:write",
+                "analytics:read",
+                "analytics:write",
+                "integrations:read",
+                "integrations:write"
+              ]
+            },
+            "default": ["sites:read", "analytics:read"]
           }
         },
         "additionalProperties": false
@@ -3378,6 +4007,7 @@
           "id",
           "name",
           "tokenPrefix",
+          "scopes",
           "expiresAt",
           "createdAt"
         ],
@@ -3392,6 +4022,10 @@
           "tokenPrefix": {
             "type": "string",
             "description": "Non-secret display prefix"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {"type": "string"}
           },
           "lastUsedAt": {
             "type": [
@@ -3477,6 +4111,7 @@
           "allowedOrigins",
           "retentionDays",
           "writeKey",
+          "serverWriteKey",
           "antiAdblockServer",
           "antiAdblockJsPath",
           "antiAdblockBeaconPath",
@@ -3510,6 +4145,11 @@
             "type": "string",
             "format": "uuid",
             "description": "Collection-only key; not an account credential"
+          },
+          "serverWriteKey": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Rotatable collection-only secret for trusted server request batches"
           },
           "antiAdblockServer": {
             "type": "string",
@@ -3573,6 +4213,18 @@
         },
         "additionalProperties": false
       },
+      "ReportSubscriptionInput": {
+        "type": "object",
+        "required": ["name", "webhookUrl", "frequency"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 120},
+          "webhookUrl": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "frequency": {"type": "string", "enum": ["daily", "weekly"]},
+          "anomalyOnly": {"type": "boolean", "default": false},
+          "enabled": {"type": "boolean", "default": true}
+        },
+        "additionalProperties": false
+      },
       "CollectInput": {
         "type": "object",
         "required": [
@@ -3617,6 +4269,73 @@
               "null"
             ],
             "minimum": 0
+          },
+          "privacyControl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "gpc",
+              null
+            ]
+          },
+          "trackerVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 32
+          }
+        }
+      },
+      "CollectionHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "acceptedTotal",
+          "rejectedTotal",
+          "lastAcceptedAt",
+          "lastRejectedAt",
+          "lastRejectionCode",
+          "lastTrackerVersion"
+        ],
+        "properties": {
+          "acceptedTotal": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "rejectedTotal": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "lastAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastRejectedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastRejectionCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastTrackerVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3649,7 +4368,10 @@
           "visitors",
           "sessions",
           "events",
-          "currentOnline"
+          "currentOnline",
+          "bounceRate",
+          "avgDurationSeconds",
+          "trend"
         ],
         "properties": {
           "views": {
@@ -3667,6 +4389,44 @@
           "currentOnline": {
             "type": "integer",
             "description": "Distinct human visitors with an event in the last five minutes"
+          },
+          "bounceRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "avgDurationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "trend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrendPoint"
+            }
+          }
+        }
+      },
+      "TrendPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "date",
+          "visitors",
+          "pageViews"
+        ],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "visitors": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pageViews": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -3809,7 +4569,9 @@
           "siteId",
           "name",
           "eventName",
-          "createdAt"
+          "createdAt",
+          "conversions",
+          "conversionRate"
         ],
         "properties": {
           "id": {
@@ -3835,6 +4597,16 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "conversions": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "conversionRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           }
         }
       },

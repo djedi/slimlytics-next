@@ -4,7 +4,7 @@ set -Eeuo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-remote_host="${SLIMLYTICS_DEPLOY_HOST:-slimdeploy@108.181.221.120}"
+remote_host="${SLIMLYTICS_DEPLOY_HOST:-slimdeploy@cheap.redseam.com}"
 remote_app="${SLIMLYTICS_DEPLOY_PATH:-/home/dustin/apps/slimlytics}"
 public_url="${SLIMLYTICS_PUBLIC_URL:-https://slimlytics.com}"
 public_url="${public_url%/}"
@@ -22,7 +22,7 @@ Builds, backs up, deploys, and verifies Slimlytics production.
 
 Environment overrides:
   SLIMLYTICS_DEPLOY_HOST       Dedicated slimdeploy SSH destination
-                               (default: slimdeploy@108.181.221.120)
+                               (default: slimdeploy@cheap.redseam.com)
   SLIMLYTICS_DEPLOY_PATH       Canonical remote app directory
   SLIMLYTICS_PUBLIC_URL        HTTPS public base URL
   SLIMLYTICS_RETAIN_RELEASES   Source rollback snapshots to keep (default: 5)

@@ -9,6 +9,7 @@
     CalendarDays,
     ChevronDown,
     CircleDot,
+    Compass,
     Download,
     Eye,
     FileText,
@@ -24,9 +25,12 @@
     Play,
     Plus,
     Search,
+    Send,
     Settings,
     Smartphone,
+    MapPin,
     Sun,
+    Trash2,
     Users,
     X,
     Zap
@@ -35,10 +39,18 @@
     ApiClient,
     demoReport,
     type AntiAdblockSettings,
+    type Anomaly,
+    type Attribution,
+    type CollectionHealth,
+    type Funnel,
+    type FunnelReport,
     type Goal,
+    type Journey,
     type LiveEvent,
     type Overview,
     type ReportRow,
+    type ReportSubscription,
+    type SearchConsoleStatus,
     type Site,
     type Visitor
   } from '$lib/api';
@@ -50,11 +62,16 @@
   type View =
     | 'rollup'
     | 'overview'
+    | 'insights'
     | 'spy'
     | 'pages'
     | 'referrers'
     | 'countries'
+    | 'regions'
+    | 'cities'
     | 'devices'
+    | 'browsers'
+    | 'operating-systems'
     | 'campaigns'
     | 'visitors'
     | 'goals'
@@ -63,11 +80,16 @@
   const api = new ApiClient(env.PUBLIC_API_BASE_URL || '/api', fetch, demo);
   const nav: Array<{ id: View; label: string; icon: typeof Activity }> = [
     { id: 'overview', label: 'Overview', icon: Gauge },
+    { id: 'insights', label: 'Insights', icon: BarChart3 },
     { id: 'spy', label: 'Spy', icon: Eye },
     { id: 'pages', label: 'Pages', icon: FileText },
     { id: 'referrers', label: 'Referrers', icon: Activity },
     { id: 'countries', label: 'Countries', icon: Globe2 },
+    { id: 'regions', label: 'Regions', icon: MapPin },
+    { id: 'cities', label: 'Cities', icon: MapPin },
     { id: 'devices', label: 'Devices', icon: Monitor },
+    { id: 'browsers', label: 'Browsers', icon: Compass },
+    { id: 'operating-systems', label: 'Operating systems', icon: Smartphone },
     { id: 'campaigns', label: 'Campaigns', icon: Zap },
     { id: 'visitors', label: 'Visitors', icon: Users },
     { id: 'goals', label: 'Goals', icon: GoalIcon },
@@ -88,6 +110,25 @@
   let visitors = $state<Visitor[]>([]);
   let events = $state<LiveEvent[]>([]);
   let goals = $state<Goal[]>([]);
+  let journeys = $state<Journey[]>([]);
+  let attribution = $state<Attribution[]>([]);
+  let anomalies = $state<Anomaly[]>([]);
+  let funnels = $state<Funnel[]>([]);
+  let funnelReports = $state<FunnelReport[]>([]);
+  let landingPages = $state<ReportRow[]>([]);
+  let exitPages = $state<ReportRow[]>([]);
+  let sources = $state<ReportRow[]>([]);
+  let content = $state<ReportRow[]>([]);
+  let aiReferrers = $state<ReportRow[]>([]);
+  let aiCrawlers = $state<ReportRow[]>([]);
+  let collectionHealth = $state<CollectionHealth | null>(null);
+  let searchConsole = $state<SearchConsoleStatus | null>(null);
+  let reportSubscriptions = $state<ReportSubscription[]>([]);
+  let briefName = $state('Weekly marketing brief');
+  let briefWebhook = $state('');
+  let briefFrequency = $state<'daily' | 'weekly'>('weekly');
+  let briefAnomaliesOnly = $state(false);
+  let newSigningSecret = $state('');
   let paused = $state(false);
   let spyFilter = $state('');
   let selectedVisitor = $state<Visitor | null>(null);
@@ -197,7 +238,56 @@
       sites = sites.map((item) =>
         item.id === site?.id ? { ...item, overview: nextOverview } : item
       );
-    } else if (['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view))
+    } else if (view === 'insights') {
+      const [
+        nextJourneys,
+        nextAttribution,
+        nextAnomalies,
+        nextFunnels,
+        landing,
+        exits,
+        sourceRows,
+        contentRows,
+        referrals,
+        crawlers
+      ] = await Promise.all([
+        api.journeys(site.id, days),
+        api.attribution(site.id, days),
+        api.anomalies(site.id, days),
+        api.funnels(site.id),
+        api.report(site.id, 'landing-pages', days),
+        api.report(site.id, 'exit-pages', days),
+        api.report(site.id, 'sources', days),
+        api.report(site.id, 'content', days),
+        api.report(site.id, 'ai-referrers', days),
+        api.report(site.id, 'ai-crawlers', days)
+      ]);
+      journeys = nextJourneys;
+      attribution = nextAttribution;
+      anomalies = nextAnomalies;
+      funnels = nextFunnels;
+      landingPages = landing;
+      exitPages = exits;
+      sources = sourceRows;
+      content = contentRows;
+      aiReferrers = referrals;
+      aiCrawlers = crawlers;
+      funnelReports = await Promise.all(
+        nextFunnels.map((funnel) => api.funnelReport(site!.id, funnel.id, days))
+      );
+    } else if (
+      [
+        'pages',
+        'referrers',
+        'countries',
+        'regions',
+        'cities',
+        'devices',
+        'browsers',
+        'operating-systems',
+        'campaigns'
+      ].includes(view)
+    )
       report = await api.report(site.id, view, days);
     else if (view === 'visitors') visitors = await api.visitors(site.id);
     else if (view === 'spy') {
@@ -205,6 +295,12 @@
       visitors = await api.visitors(site.id);
       if (resetStream || !source || source.readyState === EventSource.CLOSED) connectSpy();
     } else if (view === 'goals') goals = await api.goals(site.id);
+    else if (view === 'settings')
+      [collectionHealth, searchConsole, reportSubscriptions] = await Promise.all([
+        api.collectionHealth(site.id),
+        api.searchConsoleStatus(site.id),
+        api.reportSubscriptions(site.id)
+      ]);
   }
   function connectSpy() {
     if (!site || paused || typeof EventSource === 'undefined' || demo) return;
@@ -241,6 +337,60 @@
     const next = { ...updated, overview: site.overview };
     site = next;
     sites = sites.map((item) => (item.id === next.id ? { ...next, overview: item.overview } : item));
+  }
+  async function connectSearchConsole() {
+    if (!site) return;
+    const { authorizationUrl } = await api.connectSearchConsole(site.id);
+    location.assign(authorizationUrl);
+  }
+  async function syncSearchConsole() {
+    if (!site) return;
+    loading = true;
+    try {
+      await api.syncSearchConsole(site.id, days);
+      searchConsole = await api.searchConsoleStatus(site.id);
+    } finally {
+      loading = false;
+    }
+  }
+  async function disconnectSearchConsole() {
+    if (!site || !confirm('Disconnect Search Console and remove its cached metrics?')) return;
+    await api.disconnectSearchConsole(site.id);
+    searchConsole = await api.searchConsoleStatus(site.id);
+  }
+  async function createBrief(event: SubmitEvent) {
+    event.preventDefault();
+    if (!site || !briefName.trim() || !briefWebhook.trim()) return;
+    const created = await api.createReportSubscription(site.id, {
+      name: briefName.trim(), webhookUrl: briefWebhook.trim(), frequency: briefFrequency,
+      anomalyOnly: briefAnomaliesOnly, enabled: true
+    });
+    newSigningSecret = created.signingSecret ?? '';
+    reportSubscriptions = [...reportSubscriptions, created];
+    briefWebhook = '';
+  }
+  async function toggleBrief(subscription: ReportSubscription) {
+    if (!site) return;
+    const updated = await api.updateReportSubscription(site.id, {
+      ...subscription, enabled: !subscription.enabled
+    });
+    reportSubscriptions = reportSubscriptions.map((item) => item.id === updated.id ? updated : item);
+  }
+  async function deliverBrief(subscription: ReportSubscription) {
+    if (!site) return;
+    await api.deliverReportSubscription(site.id, subscription.id);
+    reportSubscriptions = await api.reportSubscriptions(site.id);
+  }
+  async function deleteBrief(subscription: ReportSubscription) {
+    if (!site || !confirm(`Delete ${subscription.name}?`)) return;
+    await api.deleteReportSubscription(site.id, subscription.id);
+    reportSubscriptions = reportSubscriptions.filter((item) => item.id !== subscription.id);
+  }
+  async function rotateServerKey() {
+    if (!site || !confirm('Rotate the server ingestion key? Existing log shippers will stop working.')) return;
+    const result = await api.rotateServerKey(site.id);
+    site = { ...site, serverWriteKey: result.serverWriteKey };
+    sites = sites.map((item) => item.id === site?.id ? { ...item, serverWriteKey: result.serverWriteKey } : item);
   }
   async function addGoal() {
     if (!site || !goalName || !goalTarget) return;
@@ -625,7 +775,154 @@
             </dl>
           </aside>
         {/if}
-      {:else if ['pages', 'referrers', 'countries', 'devices', 'campaigns'].includes(view)}
+      {:else if view === 'insights'}
+        <section class="page-head">
+          <div>
+            <p class="eyebrow">Marketing intelligence</p>
+            <h2>What is driving outcomes</h2>
+            <p class="muted">Attribution, journeys, content, funnels, and AI traffic.</p>
+          </div>
+        </section>
+        <div class="metric-grid compact-insights">
+          <article class="metric-card">
+            <div><small>Revenue</small><Zap /></div>
+            <strong>{attribution
+                .reduce((sum, row) => sum + row.revenue, 0)
+                .toLocaleString(undefined, { style: 'currency', currency: 'USD' })}</strong>
+            <span>{attribution.reduce((sum, row) => sum + row.conversions, 0)} conversions</span>
+          </article>
+          <article class="metric-card">
+            <div><small>Journeys</small><Activity /></div>
+            <strong>{journeys.length}</strong><span
+              >{journeys.reduce((sum, row) => sum + row.sessions, 0)} sessions</span
+            >
+          </article>
+          <article class="metric-card">
+            <div><small>Anomalies</small><Bell /></div>
+            <strong>{anomalies.length}</strong><span>30% threshold</span>
+          </article>
+          <article class="metric-card">
+            <div><small>Funnels</small><GoalIcon /></div>
+            <strong>{funnels.length}</strong><span>Sequential visitors</span>
+          </article>
+        </div>
+        <div class="two-col insight-section">
+          <ReportTable title="Landing pages" rows={landingPages.slice(0, 10)} />
+          <ReportTable title="Exit pages" rows={exitPages.slice(0, 10)} />
+        </div>
+        <div class="two-col insight-section">
+          <ReportTable title="Traffic sources" rows={sources.slice(0, 10)} />
+          <ReportTable title="Content" rows={content.slice(0, 10)} />
+        </div>
+        <div class="two-col insight-section">
+          <ReportTable title="AI referrals" rows={aiReferrers.slice(0, 10)} />
+          <ReportTable title="AI crawlers" rows={aiCrawlers.slice(0, 10)} />
+        </div>
+        <section class="panel insight-section">
+          <div class="panel-head">
+            <h2>First-touch attribution</h2><span>{attribution.length} channels</span>
+          </div>
+          {#if attribution.length}
+            <div class="table-wrap">
+              <table>
+                <thead
+                  ><tr
+                    ><th>Source / medium</th><th>Campaign</th><th>Visitors</th
+                    ><th>Conversions</th><th>Revenue</th></tr
+                  ></thead
+                >
+                <tbody>
+                  {#each attribution as row}
+                    <tr>
+                      <th>{row.source} / {row.medium}</th>
+                      <td>{row.campaign}</td>
+                      <td class="numeric">{row.visitors.toLocaleString()}</td>
+                      <td class="numeric">{row.conversions.toLocaleString()}</td>
+                      <td class="numeric"
+                        >{row.revenue.toLocaleString(undefined, {
+                          style: 'currency',
+                          currency: 'USD'
+                        })}</td
+                      >
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <div class="empty"><Activity /><p>No attributed traffic in this period.</p></div>
+          {/if}
+        </section>
+        <div class="two-col insight-section">
+          <section class="panel">
+            <div class="panel-head"><h2>Common journeys</h2><span>Ordered paths</span></div>
+            {#if journeys.length}
+              <div class="insight-list">
+                {#each journeys.slice(0, 10) as journey}
+                  <div
+                    ><strong>{journey.steps.join(' → ')}</strong><span
+                      >{journey.sessions} sessions</span
+                    ></div
+                  >
+                {/each}
+              </div>
+            {:else}
+              <div class="empty"><Activity /><p>No journeys yet.</p></div>
+            {/if}
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Anomalies</h2><span>Trailing baseline</span></div>
+            {#if anomalies.length}
+              <div class="insight-list">
+                {#each anomalies as anomaly}
+                  <div
+                    ><strong>{anomaly.date}</strong><span
+                      >{anomaly.deviationPercent > 0 ? '+' : ''}{anomaly.deviationPercent.toFixed(
+                        1
+                      )}%</span
+                    ></div
+                  >
+                {/each}
+              </div>
+            {:else}
+              <div class="empty"><Bell /><p>No material anomalies.</p></div>
+            {/if}
+          </section>
+        </div>
+        <section class="panel insight-section">
+          <div class="panel-head"><h2>Funnels</h2><span>Sequential unique visitors</span></div>
+          {#if funnelReports.length}
+            <div class="funnel-list">
+              {#each funnelReports as funnel}
+                <article>
+                  <strong>{funnel.name}</strong>
+                  <div>
+                    {#each funnel.steps as step}
+                      <span
+                        ><small>{step.label}</small><b>{step.visitors}</b
+                        ><i>{step.conversionRate.toFixed(1)}%</i></span
+                      >
+                    {/each}
+                  </div>
+                </article>
+              {/each}
+            </div>
+          {:else}
+            <div class="empty"><GoalIcon /><p>No funnels configured.</p></div>
+          {/if}
+        </section>
+      {:else if
+        [
+          'pages',
+          'referrers',
+          'countries',
+          'regions',
+          'cities',
+          'devices',
+          'browsers',
+          'operating-systems',
+          'campaigns'
+        ].includes(view)}
         <section class="page-head">
           <div>
             <p class="eyebrow">Acquisition detail</p>
@@ -758,6 +1055,114 @@
                 <dd>{site.timezone ?? 'UTC'}</dd>
               </div>
             </dl>
+          </div>
+          <div class="panel settings-card">
+            <p class="eyebrow">Collection</p>
+            <h2>{collectionHealth?.lastAcceptedAt ? 'Receiving events' : 'Waiting for events'}</h2>
+            <dl>
+              <div>
+                <dt>Accepted</dt>
+                <dd>{collectionHealth?.acceptedTotal.toLocaleString() ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Rejected</dt>
+                <dd>{collectionHealth?.rejectedTotal.toLocaleString() ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Last event</dt>
+                <dd>{collectionHealth?.lastAcceptedAt
+                    ? new Date(collectionHealth.lastAcceptedAt).toLocaleString()
+                    : 'Never'}</dd>
+              </div>
+              <div>
+                <dt>Tracker</dt>
+                <dd>{collectionHealth?.lastTrackerVersion ?? 'Unknown'}</dd>
+              </div>
+              {#if collectionHealth?.lastRejectionCode}
+                <div>
+                  <dt>Last rejection</dt>
+                  <dd><code>{collectionHealth.lastRejectionCode}</code></dd>
+                </div>
+              {/if}
+            </dl>
+          </div>
+          <div class="panel settings-card">
+            <p class="eyebrow">Server collection</p>
+            <h2>Request ingestion</h2>
+            <dl>
+              <div>
+                <dt>Endpoint</dt>
+                <dd><code>/api/ingest</code></dd>
+              </div>
+              <div>
+                <dt>Server key</dt>
+                <dd><code>{site.serverWriteKey}</code></dd>
+              </div>
+              <div>
+                <dt>Batch limit</dt>
+                <dd>100 requests</dd>
+              </div>
+            </dl>
+            <div class="test-links">
+              <button class="secondary" onclick={() => void rotateServerKey()}>Rotate key</button>
+            </div>
+          </div>
+          <div class="panel settings-card brief-settings">
+            <p class="eyebrow">Delivery</p>
+            <h2>Marketing briefs</h2>
+            <form class="brief-form" onsubmit={createBrief}>
+              <label>Name<input bind:value={briefName} maxlength="120" required /></label>
+              <label>Webhook URL<input bind:value={briefWebhook} type="url" inputmode="url" placeholder="https://hooks.example.com/report" required /></label>
+              <label>Frequency<select bind:value={briefFrequency}><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+              <label class="check-field"><input type="checkbox" bind:checked={briefAnomaliesOnly} />Anomalies only</label>
+              <button class="primary"><Plus />Create</button>
+            </form>
+            {#if newSigningSecret}
+              <p class="success-message">Signing secret: <code>{newSigningSecret}</code></p>
+            {/if}
+            {#if reportSubscriptions.length}
+              <ul class="brief-list">
+                {#each reportSubscriptions as subscription}
+                  <li>
+                    <span><strong>{subscription.name}</strong><small>{subscription.frequency} · {subscription.lastStatus ?? 'pending'}</small></span>
+                    <button class="icon-button" title="Send now" aria-label="Send now" onclick={() => void deliverBrief(subscription)}><Send /></button>
+                    <button class="secondary compact" onclick={() => void toggleBrief(subscription)}>{subscription.enabled ? 'Pause' : 'Enable'}</button>
+                    <button class="icon-button" title="Delete" aria-label="Delete" onclick={() => void deleteBrief(subscription)}><Trash2 /></button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+          <div class="panel settings-card">
+            <p class="eyebrow">Organic search</p>
+            <h2>Google Search Console</h2>
+            {#if !searchConsole?.configured}
+              <p class="muted">OAuth credentials are not configured on this deployment.</p>
+            {:else if !searchConsole.connected}
+              <p class="muted">Connect verified search properties for query and page performance.</p>
+              <div class="test-links">
+                <button class="primary" onclick={() => void connectSearchConsole()}>Connect</button>
+              </div>
+            {:else}
+              <dl>
+                <div><dt>Property</dt><dd>{searchConsole.propertyUrl ?? 'No match'}</dd></div>
+                <div>
+                  <dt>Last sync</dt>
+                  <dd>{searchConsole.lastSyncedAt
+                      ? new Date(searchConsole.lastSyncedAt).toLocaleString()
+                      : 'Never'}</dd>
+                </div>
+                {#if searchConsole.lastError}
+                  <div><dt>Status</dt><dd>{searchConsole.lastError}</dd></div>
+                {/if}
+              </dl>
+              <div class="test-links">
+                <button class="primary" onclick={() => void syncSearchConsole()}>Sync now</button>
+                <button class="secondary" onclick={() => void disconnectSearchConsole()}
+                  >Disconnect</button
+                >
+              </div>
+            {/if}
           </div>
           <div class="panel settings-card installation-card">
             {#key site.id}

@@ -1,5 +1,6 @@
 use slimlytics_backend::traffic::{
-    client_metadata, collection_origin_allowed, origin_allowed, traffic_class, RateLimiter,
+    automation_metadata, client_metadata, collection_origin_allowed, origin_allowed, traffic_class,
+    RateLimiter,
 };
 use std::{net::IpAddr, time::Duration};
 
@@ -9,6 +10,20 @@ fn origin_must_exactly_match_allowlist() {
     assert!(origin_allowed(Some("https://example.com"), &allowed));
     assert!(!origin_allowed(Some("https://evil.example"), &allowed));
     assert!(!origin_allowed(None, &allowed));
+}
+
+#[test]
+fn identifies_ai_crawlers_by_product() {
+    let automation = automation_metadata(
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1",
+    )
+    .unwrap();
+    assert_eq!(automation.name, "GPTBot");
+    assert_eq!(automation.category, "ai-crawler");
+
+    let automation = automation_metadata("ClaudeBot/1.0").unwrap();
+    assert_eq!(automation.name, "ClaudeBot");
+    assert_eq!(automation.category, "ai-crawler");
 }
 
 #[test]
@@ -52,9 +67,14 @@ fn classifies_bots_and_internal_addresses() {
 
 #[test]
 fn extracts_coarse_client_metadata() {
-    let (browser, os) = client_metadata("Mozilla/5.0 (Macintosh) AppleWebKit Chrome/126");
-    assert_eq!(browser, "Chrome");
-    assert_eq!(os, "macOS");
+    let metadata = client_metadata(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+         AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    );
+    assert_eq!(metadata.browser, "Chrome");
+    assert_eq!(metadata.browser_version.as_deref(), Some("126.0.0.0"));
+    assert_eq!(metadata.os, "Mac OSX");
+    assert_eq!(metadata.device_type, "desktop");
 }
 
 #[test]

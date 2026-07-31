@@ -10,6 +10,7 @@ export interface TrackerEvent {
   referrer?: string;
   name?: string;
   properties?: EventProperties;
+  privacyControl?: 'gpc';
 }
 
 export interface TrackerPayload {
@@ -27,6 +28,7 @@ export interface TrackerOptions {
   batchSize?: number;
   batchInterval?: number;
   respectDnt?: boolean;
+  gpcMode?: 'reduce' | 'deny';
   consent?: Consent;
   transport?: Transport;
   downloadExtensions?: string[];
@@ -34,6 +36,7 @@ export interface TrackerOptions {
 
 const SENSITIVE = /^(token|access_token|auth|authorization|password|passwd|secret|api_?key|email|phone|session|code|signature)$/i;
 const DEFAULT_DOWNLOADS = ['pdf', 'zip', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'dmg', 'exe', 'mp3', 'mp4'];
+export const TRACKER_VERSION = '1.0.0';
 
 export function redactUrl(value: string): string {
   try {
@@ -54,10 +57,13 @@ function id(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function privacySignal(): boolean {
-  if (typeof navigator === 'undefined') return false;
+function privacySignals(): { dnt: boolean; gpc: boolean } {
+  if (typeof navigator === 'undefined') return { dnt: false, gpc: false };
   const nav = navigator as Navigator & { globalPrivacyControl?: boolean; msDoNotTrack?: string };
-  return nav.globalPrivacyControl === true || nav.doNotTrack === '1' || nav.msDoNotTrack === '1';
+  return {
+    dnt: nav.doNotTrack === '1' || nav.msDoNotTrack === '1',
+    gpc: nav.globalPrivacyControl === true
+  };
 }
 
 async function defaultTransport(url: string, payload: TrackerPayload): Promise<boolean> {
@@ -89,14 +95,17 @@ async function defaultTransport(url: string, payload: TrackerPayload): Promise<b
 
 export function toCollectInput(event: TrackerEvent) {
   const referrer = event.referrer?.trim() ? event.referrer : undefined;
+  const privacyReduced = event.privacyControl === 'gpc';
   return {
     name: event.type === 'page' ? 'pageview' : event.name,
     url: event.url,
-    title: event.title,
+    title: privacyReduced ? undefined : event.title,
     referrer,
     occurredAt: event.timestamp,
-    properties: event.properties ?? {},
-    screenWidth: typeof screen === 'undefined' ? undefined : screen.width
+    properties: privacyReduced ? {} : event.properties ?? {},
+    screenWidth: typeof screen === 'undefined' ? undefined : screen.width,
+    privacyControl: event.privacyControl,
+    trackerVersion: TRACKER_VERSION
   };
 }
 
@@ -126,7 +135,14 @@ export function createTracker(options: TrackerOptions): Tracker {
   let destroyed = false;
   let sending: Promise<boolean> | undefined;
 
-  const enabled = () => !destroyed && allowed && !(options.respectDnt !== false && privacySignal());
+  const signals = () => privacySignals();
+  const enabled = () => {
+    const privacy = signals();
+    return !destroyed
+      && allowed
+      && !(options.respectDnt !== false && privacy.dnt)
+      && !(options.gpcMode === 'deny' && privacy.gpc);
+  };
   const enqueue = (event: TrackerEvent): string | undefined => {
     if (!enabled() || queuedIds.has(event.id)) return undefined;
     queuedIds.add(event.id);
@@ -136,7 +152,8 @@ export function createTracker(options: TrackerOptions): Tracker {
   };
   const context = () => ({
     timestamp: new Date().toISOString(),
-    url: redactUrl(typeof location === 'undefined' ? '' : location.href)
+    url: redactUrl(typeof location === 'undefined' ? '' : location.href),
+    privacyControl: signals().gpc ? 'gpc' as const : undefined
   });
 
   const page = (properties?: EventProperties) => enqueue({
@@ -238,6 +255,7 @@ export function trackerOptionsFromScript(script: HTMLScriptElement | null): Trac
     endpoint: script.dataset.endpoint || '/api/collect',
     autoTrack: script.dataset.autoTrack !== 'false',
     respectDnt: script.dataset.respectDnt !== 'false',
+    gpcMode: script.dataset.gpcMode === 'deny' ? 'deny' : 'reduce',
     consent: script.dataset.consent === 'denied' ? 'denied' : 'granted'
   };
 }

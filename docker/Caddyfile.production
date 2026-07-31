@@ -1,6 +1,10 @@
 {
 	admin off
 	email {$ACME_EMAIL}
+	servers {
+		trusted_proxies static private_ranges
+		trusted_proxies_strict
+	}
 }
 
 {$SLIMLYTICS_DOMAIN} {

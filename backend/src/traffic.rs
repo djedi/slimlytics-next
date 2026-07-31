@@ -3,10 +3,14 @@ use std::{
     net::IpAddr,
     time::{Duration, Instant},
 };
+use woothee::parser::Parser;
 
 pub fn traffic_class(user_agent: &str, ip: IpAddr, internal: &[IpAddr]) -> &'static str {
     if internal.contains(&ip) {
         return "internal";
+    }
+    if automation_metadata(user_agent).is_some() {
+        return "bot";
     }
     let ua = user_agent.to_ascii_lowercase();
     if ["bot", "spider", "crawler", "headless", "preview"]
@@ -17,6 +21,32 @@ pub fn traffic_class(user_agent: &str, ip: IpAddr, internal: &[IpAddr]) -> &'sta
     } else {
         "human"
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AutomationMetadata {
+    pub name: &'static str,
+    pub category: &'static str,
+}
+
+pub fn automation_metadata(user_agent: &str) -> Option<AutomationMetadata> {
+    let agents = [
+        ("OAI-SearchBot", "OAI-SearchBot", "ai-crawler"),
+        ("ChatGPT-User", "ChatGPT-User", "ai-crawler"),
+        ("GPTBot", "GPTBot", "ai-crawler"),
+        ("ClaudeBot", "ClaudeBot", "ai-crawler"),
+        ("Claude-User", "Claude-User", "ai-crawler"),
+        ("PerplexityBot", "PerplexityBot", "ai-crawler"),
+        ("Perplexity-User", "Perplexity-User", "ai-crawler"),
+        ("Google-Extended", "Google-Extended", "ai-crawler"),
+        ("Bytespider", "Bytespider", "ai-crawler"),
+        ("Googlebot", "Googlebot", "crawler"),
+        ("Bingbot", "Bingbot", "crawler"),
+    ];
+    agents
+        .into_iter()
+        .find(|(needle, _, _)| user_agent.contains(needle))
+        .map(|(_, name, category)| AutomationMetadata { name, category })
 }
 
 #[derive(Clone)]
@@ -44,32 +74,37 @@ impl RateLimiter {
     }
 }
 
-pub fn client_metadata(user_agent: &str) -> (&'static str, &'static str) {
-    let browser = if user_agent.contains("Firefox/") {
-        "Firefox"
-    } else if user_agent.contains("Edg/") {
-        "Edge"
-    } else if user_agent.contains("Chrome/") {
-        "Chrome"
-    } else if user_agent.contains("Safari/") {
-        "Safari"
-    } else {
-        "Other"
-    };
-    let os = if user_agent.contains("Android") {
-        "Android"
-    } else if user_agent.contains("iPhone") || user_agent.contains("iPad") {
-        "iOS"
-    } else if user_agent.contains("Macintosh") {
-        "macOS"
-    } else if user_agent.contains("Windows") {
-        "Windows"
-    } else if user_agent.contains("Linux") {
-        "Linux"
-    } else {
-        "Other"
-    };
-    (browser, os)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientMetadata {
+    pub browser: String,
+    pub browser_version: Option<String>,
+    pub os: String,
+    pub os_version: Option<String>,
+    pub device_type: &'static str,
+}
+
+pub fn client_metadata(user_agent: &str) -> ClientMetadata {
+    let parsed = Parser::new().parse(user_agent);
+    let value = |raw: &str| (raw != "UNKNOWN" && !raw.is_empty()).then(|| raw.to_owned());
+    ClientMetadata {
+        browser: parsed
+            .as_ref()
+            .and_then(|result| value(result.name))
+            .unwrap_or_else(|| "Other".into()),
+        browser_version: parsed.as_ref().and_then(|result| value(result.version)),
+        os: parsed
+            .as_ref()
+            .and_then(|result| value(result.os))
+            .unwrap_or_else(|| "Other".into()),
+        os_version: parsed
+            .as_ref()
+            .and_then(|result| value(result.os_version.as_ref())),
+        device_type: match parsed.as_ref().map(|result| result.category) {
+            Some("smartphone" | "mobilephone") => "mobile",
+            Some("tablet") => "tablet",
+            _ => "desktop",
+        },
+    }
 }
 
 pub fn origin_allowed(origin: Option<&str>, allowed: &[String]) -> bool {

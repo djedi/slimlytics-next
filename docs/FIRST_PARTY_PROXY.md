@@ -87,7 +87,22 @@ apachectl graceful
 2. Open the beacon test link. It should return `{"status":"ok"}` without inserting an analytics event.
 3. Load a measured page and confirm the browser requests the custom JavaScript and beacon paths on the measured site's domain.
 4. Confirm a new page view appears in Slimlytics.
-5. Confirm denied consent, DNT, and GPC suppress browser events.
+5. Confirm denied consent and DNT suppress browser events. Confirm GPC sends a privacy-reduced event without title or custom properties.
 6. Confirm unrelated paths still reach the measured application normally.
 
 The legacy `/s.js` and `/api/e/{writeKey}` aliases remain available for backward compatibility, but new installations should use the generated per-site proxy flow.
+
+## Optional Cloudflare edge
+
+Slimlytics does not need to move its application or PostgreSQL database to Cloudflare. Cloudflare can sit in front of the existing Caddy deployment as a DNS and HTTP edge:
+
+1. Move the domain's authoritative DNS to Cloudflare and proxy the Slimlytics record.
+2. Use **Full (strict)** SSL/TLS mode so Cloudflare validates Caddy's certificate.
+3. Enable the **Add visitor location headers** Managed Transform.
+4. Keep `TRUST_PROXY=true` on the Slimlytics backend.
+5. Purge the tracker paths from cache after tracker releases, or configure them for short cache lifetimes.
+6. Verify a collection request and confirm country, region, and city populate in the dashboard.
+
+The backend accepts Cloudflare location headers only when the request arrived through the configured trusted proxy chain. Do not expose the backend port publicly or trust browser-supplied forwarding/location headers.
+
+Without Cloudflare, mount a MaxMind GeoLite2/GeoIP2 City database into the backend container and set `GEOIP_DATABASE_PATH` to its container path. The database file is operational data and must not be committed.
