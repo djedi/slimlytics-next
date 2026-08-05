@@ -12,23 +12,23 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.27.0",
-    "@scalar/api-reference": "1.63.0"
+    "@lucide/svelte": "^1.28.0",
+    "@scalar/api-reference": "1.64.0"
   },
   "devDependencies": {
-    "@redocly/cli": "2.42.0",
+    "@redocly/cli": "2.43.2",
     "@sveltejs/adapter-node": "^5.2.12",
-    "@sveltejs/kit": "^2.22.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@testing-library/jest-dom": "^6.6.3",
+    "@sveltejs/kit": "^2.70.2",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.2.8",
-    "@types/node": "^24.13.3",
-    "jsdom": "^26.1.0",
+    "@types/node": "^26.1.2",
+    "jsdom": "^30.0.1",
     "svelte": "^5.33.10",
     "svelte-check": "^4.2.1",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
-    "vitest": "^3.1.4"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "cookie": "^0.7.2"
