@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-bookworm-slim AS tracker
+FROM node:25-bookworm-slim AS tracker
 WORKDIR /src/tracker
 COPY tracker/package.json tracker/package-lock.json* ./
 RUN npm ci
 COPY tracker/ ./
 RUN npm run test -- --run && npm run build
 
-FROM node:24-bookworm-slim AS frontend-builder
+FROM node:25-bookworm-slim AS frontend-builder
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
@@ -19,12 +19,12 @@ ENV PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 ENV PUBLIC_DEMO_MODE=false
 RUN npm run check && npm run test -- --run && npm run build
 
-FROM node:24-bookworm-slim AS runtime-deps
+FROM node:25-bookworm-slim AS runtime-deps
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
